@@ -17,7 +17,32 @@ not been validated.
 The owner confirmed that the knob's English **HA Lights** screen controls the
 Home Assistant group `light.knob_lights`: brightness, on/off, RGB color and
 Kelvin color temperature all work. On the knob, scroll to **HA Lights** and
-hold its icon to open the controls. The bridge release is version 0.5.2.
+hold its icon to open the controls. These controls were verified with 0.5.2;
+the bridge release is now version 0.6.1.
+
+### Separate brightness controls and a red preset
+
+The owner's current configuration enables `separate_brightness_controls`:
+
+Scroll to **RGB Lights** or **Warm White**, hold its icon to open the brightness
+ring, then turn the knob. Press **Red 10%** to restore the preset.
+
+| Entry | Action |
+| --- | --- |
+| RGB Lights | Set the selected RGB color's brightness while keeping the warm-white level. |
+| Warm White | Set warm LED brightness while keeping the RGB level. |
+| Red 10% | Activate the saved **Usual Red 10%** Home Assistant scene. |
+
+The scene is also available in Home Assistant as `scene.usual_red_10`.
+`independent_channels` enables RGB + warm-white blending on the two Wiz lights.
+The YN bar stays in RGB while RGB is above zero and switches to warm white when
+RGB is zero, because its HA integration exposes separate modes. The red preset
+sets RGB to 10% and warm white to 0%.
+
+The owner confirmed both brightness rings work and RGB stays on while warm
+white increases. The English entries, RGB commands and preset presses are also
+confirmed in the live setup. With separate controls disabled, the original **HA Lights**
+entry and full-color controls below remain available.
 
 Color mode explicitly zeros RGBW/RGBWW white channels and preserves brightness.
 Use its brightness ring to dim the selected RGB color; use temperature control
@@ -64,7 +89,7 @@ Solid arrows show control and event delivery. Dashed arrows show feedback to
 the knob. The bridge authenticates both Mesh layers before acting on a command;
 normal operation follows this local path without a Yeelight cloud connection.
 
-### Using the knob
+### Using the original HA Lights menu
 
 ```mermaid
 ---
@@ -174,7 +199,7 @@ uppercase path placeholder with your own file path:
 
 The dependency installation and public-source tests were checked in a fresh
 virtual environment. Tests requiring private captures or an external firmware
-reference skip when those inputs are absent. The full owner's 16-test suite
+reference skip when those inputs are absent. The full owner's 21-test suite
 also passed. Firmware builders reproduced the exact candidate hashes used on
 the device, and offline decoding revalidated all 57 brightness-capture packets.
 These checks do not repeat firmware flashing.

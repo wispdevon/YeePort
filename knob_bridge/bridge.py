@@ -21,7 +21,7 @@ import paho.mqtt.client as mqtt
 from mesh import Activity, reports
 from clock_sync import run_clock_sync
 from weather_sync import run_weather_sync
-from light_control import LightReceiver, LightWorker
+from light_control import LightReceiver, LightWorker, SeparateLightController
 from light_sync import run_light_sync
 
 
@@ -72,12 +72,16 @@ def light_discovery(address, name):
     identifier = "yeegate_" + address.replace(":", "").lower()
     yield "homeassistant/event/" + identifier + "/light/config", {
         "name": "Light command", "unique_id": identifier + "_light_command",
-        "state_topic": topic + "/light_command", "event_types": ["brightness", "power_on", "power_off", "color", "color_temperature"],
+        "state_topic": topic + "/light_command", "event_types": ["brightness", "power_on", "power_off", "color", "color_temperature", "warm_brightness", "warm_power_on", "warm_power_off", "scene"],
         "availability_topic": topic + "/availability", "icon": "mdi:lightbulb",
         "device": existing["device"]}
     for action, label in [("brightness", "Brightness changed"), ("power_on", "Light turned on"),
                           ("power_off", "Light turned off"), ("color", "Color changed"),
-                          ("color_temperature", "Color temperature changed")]:
+                          ("color_temperature", "Color temperature changed"),
+                          ("warm_brightness", "Warm-white brightness changed"),
+                          ("warm_power_on", "Warm white turned on"),
+                          ("warm_power_off", "Warm white turned off"),
+                          ("scene", "Red 10% preset pressed")]:
         yield "homeassistant/device_automation/" + identifier + "/" + action + "/config", {
             "automation_type": "trigger", "type": label, "subtype": "HA Lights",
             "topic": topic + "/light_command", "payload": action,
@@ -106,6 +110,8 @@ async def run(options):
         raise ValueError("Verified Mesh keys are required for light control")
     light_worker = LightWorker(options.get("light_entity", "light.knob_lights")) if (
         receiver is not None and options.get("light_control_enabled", False)) else None
+    if light_worker and options.get('separate_brightness_controls', False):
+        light_worker.callback = SeparateLightController(options)
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                          client_id="yeegate-knob-" + address.replace(":", "").lower())
     if settings.get("username"):
@@ -222,7 +228,11 @@ async def run(options):
                     light_worker.entity, stopped, lock=local_gatt_lock, find_device=find_device,
                     busy=light_busy, suppress_activity=suppress_activity,
                     color_controls=options.get("color_controls_enabled", False),
-                    on_feedback=receiver.scaling.rebase))
+                    on_feedback=receiver.scaling.rebase,
+                    separate_controls=options.get('separate_brightness_controls', False),
+                    on_warm_feedback=receiver.warm_scaling.rebase,
+                    independent_channels=options.get('independent_channels', False),
+                    on_levels_feedback=getattr(light_worker.callback, 'sync_feedback', None)))
             clock_task = asyncio.create_task(run_clock_sync(
                 options, stopped, lock=local_gatt_lock, suppress_activity=suppress_activity,
                 find_device=find_device))

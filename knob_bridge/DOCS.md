@@ -1,11 +1,33 @@
 # YeeGate S Knob
 
-Version 0.5.2 decrypts and authenticates this provisioned S Knob's light commands
+Version 0.6.1 decrypts and authenticates this provisioned S Knob's light commands
 locally. Its third entry, **HA Lights**, controls the configured Home Assistant
 light group. Clock and weather synchronization remain local. No Yeelight login
 or cloud credentials are used during operation.
 
 ## Use the knob
+
+With `separate_brightness_controls` enabled, the menu has **RGB Lights**,
+**Warm White**, and a **Red 10%** preset entry after the two relays. Hold either
+light icon to open its brightness ring. With `independent_channels` enabled,
+RGB Lights changes RGB intensity while preserving warm-white intensity, and
+Warm White changes the warm LED intensity while preserving RGB. Turning either
+channel to zero leaves the other running. Both zero turns the lights off.
+
+The two Wiz lights expose native RGBW/RGBWW channels and support this blend.
+The YN bar exposes RGB and temperature as separate modes: it follows RGB while
+RGB is above zero, then follows warm white when RGB is zero. The warm fallback
+uses `warm_white_kelvin` (2700 K by default). The bridge reconstructs each
+channel's effective brightness from native color values and master brightness
+for the two rings; HA's ordinary brightness attribute is the shared master level.
+
+The preset entry activates the persistent Home Assistant scene configured in
+`preset_scene`, normally `scene.usual_red_10`, and resets RGB to 10% and warm
+white to zero. This scene must exist in HA. Disabling `independent_channels`
+uses the earlier behavior in which each brightness entry selects its mode.
+
+The original HA Lights menu described below remains available when
+`separate_brightness_controls` is disabled.
 
 Scroll to **HA Lights**. Hold its icon to open the brightness ring, then rotate
 clockwise to brighten or counterclockwise to dim. The decoded percentage is
@@ -93,6 +115,30 @@ state. Failed service calls are logged and not retried as stale commands.
 
 Reprovisioning or a Mesh IV-index change requires matching key/configuration
 updates; this release does not automate network credential refresh.
+
+## Red preset and separate-menu labels
+
+The installed **Usual Red 10%** scene contains the four target lights with
+brightness 26 out of 255, pure RGB red, and zero white channels. It is saved in
+HA's scene configuration and survives scene reloads/restarts. Activate it from
+Settings → Automations & scenes → Scenes, or target `scene.usual_red_10` in an
+automation. Unavailable members receive their desired state when a later
+activation finds them available; activating a scene does not queue retries.
+
+The new device-menu labels use the existing authenticated image-upload codec.
+An owner-prepared, mode-0600 bundle at `/share/yeeport-display-labels.json`
+contains `address`, `device_key`, and `labels`, with exact index/name pairs
+2/`RGB Lights`, 3/`Warm White`, and 4/`Red 10%`. Each label's `png` is its
+base64 vendor-rendered PNG. The app mounts `/share`, uploads only those bounded
+device-image slots during initial menu setup, then deletes the bundle. Keep
+this file private; the package and repository contain no label images or keys.
+
+The owner confirmed the three new English entries are visible. Authenticated
+RGB ring and preset presses have reached HA and executed successfully. A live
+blend test verified RGB 10% + warm 15%, then RGB 20% with warm still 15%, and
+preset restoration to RGB 10% + warm 0%. The owner confirmed the physical
+Warm White ring works and both RGB and warm white stay on together.
+The prior single-entry color/temperature UI is physically verified.
 
 ## Clock, weather and screen language
 

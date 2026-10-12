@@ -9,12 +9,105 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "knob_bridge"))
-from light_control import BrightnessScaling, LightReceiver, LightWorker, service_payload, pure_color_services
+from light_control import (BrightnessScaling, LightReceiver, LightWorker, service_payload,
+                           pure_color_services, SeparateLightController, warm_white_services)
 from knob_mesh_commands import decode_light_command, VENDOR_OPCODE
 from light_sync import light_display_state
+from channel_control import blend_services, independent_display_state, selected_rgb, light_members
 
 
 class LightServiceMapping(unittest.TestCase):
+    def test_separate_menu_routes_warm_and_every_preset_press(self):
+        options = {'address': 'F8:24:41:39:9F:38', 'mesh_net_key': '00' * 16,
+                   'mesh_app_key': '11' * 16, 'mesh_iv_index': 0,
+                   'mesh_unicast_address': 5, 'separate_brightness_controls': True}
+        payloads = [bytes.fromhex(value) for value in [
+            '04010000000f', '0500000000010000', '0500000000000000',
+            '0403000000ff0000', '05010000000f']]
+        with tempfile.TemporaryDirectory() as folder:
+            receiver = LightReceiver(options, Path(folder) / 'sequence.json')
+            events = []
+            for sequence, payload in enumerate(payloads, 1):
+                message = SimpleNamespace(control=False, source=5, sequence=sequence,
+                                          destination=65278)
+                with patch('light_control.fields', return_value=[(0x2a, b'packet')]), patch(
+                        'light_control.decrypt_network', return_value=message), patch(
+                        'knob_mesh_commands.decrypt_network', return_value=message), patch(
+                        'knob_mesh_commands.decrypt_unsegmented_access', return_value=VENDOR_OPCODE + payload):
+                    events.extend(receiver.receive(options['address'], -60, b''))
+            self.assertEqual([(e['kind'], e['value']) for e in events],
+                             [('warm_brightness', 15), ('scene', 'usual_red_10'),
+                              ('scene', 'usual_red_10')])
+            self.assertEqual(receiver.highest, 3)
+
+    def test_independent_blend_preserves_levels_and_feedback(self):
+        states = {'light.group': {'entity_id': 'light.group', 'state': 'on', 'attributes':
+                  {'entity_id': ['light.bulb', 'light.strip', 'light.bar']}},
+                  'light.bulb': {'entity_id': 'light.bulb', 'state': 'on', 'attributes':
+                  {'supported_color_modes': ['rgbww', 'color_temp'], 'color_mode': 'rgbww',
+                   'rgbww_color': [170, 0, 0, 0, 255], 'brightness': 38}},
+                  'light.strip': {'entity_id': 'light.strip', 'state': 'on', 'attributes':
+                  {'supported_color_modes': ['rgbw', 'color_temp'], 'color_mode': 'rgbw',
+                   'rgbw_color': [170, 0, 0, 255], 'brightness': 38}},
+                  'light.bar': {'entity_id': 'light.bar', 'state': 'on', 'attributes':
+                  {'supported_color_modes': ['rgb', 'color_temp'], 'color_mode': 'rgb',
+                   'rgb_color': [255, 0, 0], 'brightness': 26}}}
+        self.assertEqual(independent_display_state('light.group', states),
+                         {'rgb': (True, 10), 'warm': (True, 15)})
+        self.assertEqual(selected_rgb(light_members('light.group', states), [0, 0, 255]), [255, 0, 0])
+        calls = blend_services('light.group', states, [255, 0, 0], 10, 15)
+        self.assertEqual(calls[0], ('turn_on', {'entity_id': 'light.bulb', 'brightness': 38,
+                                             'rgbww_color': [170, 0, 0, 0, 255]}))
+        self.assertEqual(calls[1][1]['rgbw_color'], [170, 0, 0, 255])
+        self.assertEqual(calls[2][1]['brightness_pct'], 10)
+        calls = blend_services('light.group', states, [255, 0, 0], 0, 15)
+        self.assertEqual(calls[0][1]['rgbww_color'], [0, 0, 0, 0, 255])
+        self.assertEqual(calls[2][1]['color_temp_kelvin'], 2700)
+        self.assertTrue(all(service == 'turn_off' for service, _ in
+                            blend_services('light.group', states, [255, 0, 0], 0, 0)))
+        with self.assertRaises(ValueError):
+            blend_services('light.group', states, [255, 0, 0], 10, 101)
+
+    def test_separate_controls_switch_modes_and_scene_restores_red(self):
+        states = [
+            {'entity_id': 'light.group', 'state': 'on', 'attributes':
+                {'entity_id': ['light.rgbww', 'light.rgbw', 'light.rgb'],
+                 'color_mode': 'rgbww', 'rgb_color': [0, 0, 255]}},
+            *[{'entity_id': 'light.' + mode, 'state': 'on', 'attributes':
+                {'supported_color_modes': [mode, 'color_temp'], 'min_color_temp_kelvin': 2700,
+                 'max_color_temp_kelvin': 6500}} for mode in ['rgbww', 'rgbw', 'rgb']]]
+        calls = []
+        def request(path, payload=None):
+            if path == 'states':
+                return states
+            calls.append((path, payload))
+            return []
+        controller = SeparateLightController({}, request)
+        controller('light.group', {'kind': 'warm_brightness', 'value': 15})
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(data['brightness_pct'] == 15 and data['color_temp_kelvin'] == 2700
+                            for _, data in calls))
+        states[0]['attributes'].update(color_mode='color_temp', rgb_color=[255, 200, 100])
+        calls.clear()
+        controller('light.group', {'kind': 'brightness', 'value': 20})
+        self.assertEqual(calls[0], ('services/light/turn_on',
+            {'entity_id': 'light.rgbww', 'rgbww_color': [0, 0, 255, 0, 0], 'brightness_pct': 20}))
+        self.assertTrue(all(data['brightness_pct'] == 20 for _, data in calls))
+        calls.clear()
+        controller('light.group', {'kind': 'scene', 'value': 'usual_red_10'})
+        self.assertEqual(calls, [('services/scene/turn_on', {'entity_id': 'scene.usual_red_10'})])
+        self.assertEqual(controller.rgb, [255, 0, 0])
+        with self.assertRaises(ValueError):
+            controller('light.group', {'kind': 'warm_brightness', 'value': 101})
+
+    def test_display_reports_separate_mode_brightness(self):
+        state = {'state': 'on', 'attributes': {'brightness': 26, 'color_mode': 'rgbww'}}
+        self.assertEqual(light_display_state(state, separate_controls=True),
+                         {'rgb': (True, 10), 'warm': (False, 0)})
+        state['attributes']['color_mode'] = 'color_temp'
+        self.assertEqual(light_display_state(state, separate_controls=True),
+                         {'rgb': (False, 0), 'warm': (True, 10)})
+
     def test_mixed_group_color_disables_all_white_channels(self):
         def state(modes, **extra):
             return {'state': 'on', 'attributes': {'supported_color_modes': modes, **extra}}
@@ -125,6 +218,27 @@ class LightServiceMapping(unittest.TestCase):
 
 
 class LightCommandCoalescing(unittest.IsolatedAsyncioTestCase):
+    async def test_warm_off_preserves_pending_rgb_in_independent_mode(self):
+        calls, complete = [], asyncio.Event()
+        loop = asyncio.get_running_loop()
+        def callback(entity, event):
+            calls.append((event['kind'], event['value']))
+            if len(calls) == 2:
+                loop.call_soon_threadsafe(complete.set)
+        callback.independent = True
+        worker = LightWorker('light.knob_lights', callback)
+        task = asyncio.create_task(worker.run())
+        try:
+            worker.submit({'kind': 'warm_brightness', 'value': 30})
+            worker.submit({'kind': 'brightness', 'value': 10})
+            worker.submit({'kind': 'warm_power', 'value': False})
+            await asyncio.wait_for(complete.wait(), 1)
+            self.assertEqual(calls, [('brightness', 10), ('warm_power', False)])
+        finally:
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
     async def test_color_survives_brightness_in_the_same_burst(self):
         calls, complete = [], asyncio.Event()
         loop = asyncio.get_running_loop()

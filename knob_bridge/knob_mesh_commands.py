@@ -30,8 +30,10 @@ def decode_light_command(packet, *, net_key, app_key, device_key, iv_index,
     if plain[:3] != VENDOR_OPCODE:
         return None
     payload = plain[3:]
-    if not payload or payload[0] != slot:
+    allowed = (slot,) if isinstance(slot, int) else tuple(slot)
+    if not payload or payload[0] not in allowed:
         return None
+    slot = payload[0]
     if len(payload) == 6 and payload[1:5] == bytes((1, 0, 0, 0)) and payload[5] <= 100:
         return LightCommand("brightness", payload[5], slot, message.source, message.sequence)
     # ESP 4200df84: selector 2 sends big-endian Kelvin, selector 3 RGB.

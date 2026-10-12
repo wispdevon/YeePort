@@ -351,3 +351,25 @@ were applied through the new bridge, and both Wiz devices still report zero
 white channels. Temperature control remains a separate Kelvin operation.
 All 16 tests pass, including mixed groups with duplicate/nested members,
 unavailable members, and white-only lights. Repository docs record the behavior.
+
+### Independent RGB and warm-white brightness (0.6.1)
+
+The owner requested independent RGB and warm-white levels that can blend,
+plus a red 10% preset in Home Assistant and on the knob. Version 0.6.1 is
+installed with separate controls and independent channels enabled. The menu
+preserves both relays and adds English RGB Lights, Warm White, and Red 10%
+entries. The owner confirmed these entries are visible. Authenticated slot-3
+RGB brightness and slot-5 preset commands have reached Home Assistant.
+
+The two Wiz lights receive native RGBWW/RGBW channel values with a shared
+brightness normalized to the larger channel level. Idle display feedback
+derives each channel's effective level from those values. A live Home Assistant
+test verified RGB 10% with warm white 15%, then RGB 20% while warm stayed at
+15%. The YN integration exposes separate modes, so that bar follows RGB while
+RGB is above zero and switches to warm white when RGB is zero.
+
+The saved scene `scene.usual_red_10` restored the three available group members
+to pure red at brightness 26/255, with white channels zero. Its fourth member
+was unavailable. The owner confirmed the physical Warm White ring changes
+warm intensity while red stays on, and both channels remain on together.
+Slot-4 routing and repeated preset presses are covered by the local tests.

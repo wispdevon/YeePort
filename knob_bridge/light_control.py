@@ -14,6 +14,7 @@ from cryptography.exceptions import InvalidTag
 from knob_mesh_commands import decode_light_command
 from mesh import fields
 from mesh_crypto import decrypt_network
+from channel_control import (blend_services, independent_display_state, light_members, selected_rgb)
 
 
 class BrightnessScaling:
@@ -67,6 +68,9 @@ class LightReceiver:
         self.last_command = 0
         self.scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
                                          options.get('brightness_maximum_gain', 4))
+        self.separate = options.get('separate_brightness_controls', False)
+        self.warm_scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
+                                              options.get('brightness_maximum_gain', 4))
         try:
             saved = json.loads(self.path.read_text())
             if saved["fingerprint"] == self.fingerprint:
@@ -85,10 +89,14 @@ class LightReceiver:
             try:
                 command = decode_light_command(packet, net_key=self.net_key,
                             app_key=self.app_key, device_key=None, iv_index=self.iv_index,
-                            source_address=self.source, slot=3)
+                            source_address=self.source, slot=(3, 4, 5) if self.separate else 3)
             except (ValueError, InvalidTag):
                 continue
             if command is None or command.sequence <= self.highest:
+                continue
+            if command.slot == 4 and command.kind not in ('brightness', 'power'):
+                continue
+            if command.slot == 5 and command.kind != 'power':
                 continue
             # Destination is authenticated inside the network PDU; confirm the
             # exact observed publication address before acting on this slot.
@@ -106,11 +114,18 @@ class LightReceiver:
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
             event = asdict(command)
+            if command.slot == 5:
+                event.update(kind='scene', value='usual_red_10')
+                self.scaling.rebase(10)
+                self.warm_scaling.rebase(0)
+            elif command.slot == 4:
+                event['kind'] = 'warm_brightness' if command.kind == 'brightness' else 'warm_power'
             if command.kind == 'brightness':
                 event['raw_percentage'] = command.value
-                event['value'] = self.scaling.apply(command.value, self.last_command)
-            event.update(event_type=command.kind if command.kind != "power" else
-                         ("power_on" if command.value else "power_off"),
+                scaling = self.warm_scaling if command.slot == 4 else self.scaling
+                event['value'] = scaling.apply(command.value, self.last_command)
+            event.update(event_type=event['kind'] if event['kind'] not in ('power', 'warm_power') else
+                         (('warm_' if command.slot == 4 else '') + ('power_on' if command.value else 'power_off')),
                          address=self.address, rssi=rssi, authenticated=True,
                          timestamp=datetime.now(timezone.utc).isoformat())
             yield event
@@ -201,6 +216,120 @@ def pure_color_services(entity, event, states):
     return calls
 
 
+def ha_request(path, payload=None):
+    token = os.environ.get('SUPERVISOR_TOKEN')
+    if not token:
+        raise RuntimeError('Home Assistant app API access is required')
+    request = Request('http://supervisor/core/api/' + path,
+                      data=json.dumps(payload).encode() if payload is not None else None,
+                      headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+    with urlopen(request, timeout=10) as response:
+        return json.load(response)
+
+
+def warm_white_services(entity, value, states, kelvin=2700):
+    # Reuse strict percentage/target validation before constructing any call.
+    service_payload(entity, {'kind': 'brightness', 'value': value})
+    if value == 0:
+        return [('turn_off', {'entity_id': entity})]
+    # The color planner resolves nested groups and deduplicates available lights.
+    leaves = pure_color_services(entity, {'kind': 'color', 'value': [255, 0, 0]}, states)
+    calls = []
+    for _, data in leaves:
+        target = data['entity_id']
+        attributes = states[target].get('attributes', {})
+        if 'color_temp' not in attributes.get('supported_color_modes', []):
+            continue
+        temperature = min(attributes.get('max_color_temp_kelvin', 6500),
+                          max(attributes.get('min_color_temp_kelvin', 2000), kelvin))
+        calls.append(('turn_on', {'entity_id': target, 'brightness_pct': value,
+                                 'color_temp_kelvin': temperature}))
+    if not calls:
+        raise ValueError('No available warm-white lights in the target')
+    return calls
+
+
+class SeparateLightController:
+    """Distinct RGB and warm-white mode/brightness commands plus a fixed scene."""
+    def __init__(self, options, request=ha_request):
+        self.request = request
+        self.kelvin = options.get('warm_white_kelvin', 2700)
+        self.scene = options.get('preset_scene', 'scene.usual_red_10')
+        if not re.fullmatch(r'scene\.[a-z0-9_]+', self.scene):
+            raise ValueError('Invalid preset scene')
+        self.rgb = [255, 0, 0]
+        self.rgb_level = self.warm_level = 10
+        self.independent = options.get('independent_channels', False)
+        self.initialized = False
+
+    def sync_feedback(self, state):
+        if self.independent and state:
+            self.rgb_level, self.warm_level = state['rgb'][1], state['warm'][1]
+            self.initialized = True
+
+    def __call__(self, entity, event):
+        kind, value = event['kind'], event['value']
+        if kind == 'scene':
+            if value != 'usual_red_10':
+                raise ValueError('Unsupported preset')
+            self.request('services/scene/turn_on', {'entity_id': self.scene})
+            self.rgb, self.rgb_level, self.warm_level = [255, 0, 0], 10, 0
+            self.initialized = True
+            return
+        states = {state['entity_id']: state for state in self.request('states')}
+        if self.independent:
+            if not self.initialized:
+                self.sync_feedback(independent_display_state(entity, states))
+            self.rgb = selected_rgb(light_members(entity, states), self.rgb)
+            if kind in ('brightness', 'warm_brightness', 'power', 'warm_power'):
+                warm = kind.startswith('warm_')
+                if kind in ('power', 'warm_power'):
+                    if type(value) is not bool:
+                        raise ValueError('Invalid channel power')
+                    value = ((self.warm_level if warm else self.rgb_level) or 10) if value else 0
+                if type(value) is not int or not 0 <= value <= 100:
+                    raise ValueError('Invalid channel brightness')
+                if warm:
+                    self.warm_level = value
+                else:
+                    self.rgb_level = value
+                for service, data in blend_services(entity, states, self.rgb, self.rgb_level,
+                                                     self.warm_level, self.kelvin):
+                    self.request('services/light/' + service, data)
+                return
+        group = states.get(entity, {})
+        attributes = group.get('attributes', {})
+        if attributes.get('color_mode') in ('rgb', 'rgbw', 'rgbww'):
+            rgb = attributes.get('rgb_color')
+            if isinstance(rgb, (tuple, list)) and len(rgb) == 3:
+                self.rgb = list(rgb)
+        if kind in ('warm_brightness', 'warm_power'):
+            if kind == 'warm_power':
+                if type(value) is not bool:
+                    raise ValueError('Invalid warm power command')
+                value = (self.warm_level or 10) if value else 0
+            calls = warm_white_services(entity, value, states, self.kelvin)
+            self.warm_level = value
+        elif kind in ('brightness', 'power'):
+            if kind == 'power':
+                if type(value) is not bool:
+                    raise ValueError('Invalid RGB power command')
+                value = (self.rgb_level or 10) if value else 0
+            service_payload(entity, {'kind': 'brightness', 'value': value})
+            if value == 0:
+                calls = [('turn_off', {'entity_id': entity})]
+            else:
+                calls = pure_color_services(entity, {'kind': 'color', 'value': self.rgb}, states)
+                for _, data in calls:
+                    data['brightness_pct'] = value
+            self.rgb_level = value
+        else:
+            call_light(entity, event)
+            return
+        for service, data in calls:
+            self.request('services/light/' + service, data)
+
+
 class LightWorker:
     def __init__(self, entity, callback=call_light):
         self.entity, self.callback = entity, callback
@@ -209,8 +338,15 @@ class LightWorker:
         self.wake = asyncio.Event()
 
     def submit(self, event):
-        if event['kind'] == 'power' and event['value'] is False:
+        if event['kind'] == 'scene':
             self.pending.clear()
+        elif event['kind'] in ('power', 'warm_power') and event['value'] is False:
+            if getattr(self.callback, 'independent', False):
+                family = ('warm_brightness', 'warm_power') if event['kind'] == 'warm_power' else ('brightness', 'power')
+                for kind in family:
+                    self.pending.pop(kind, None)
+            else:
+                self.pending.clear()
         self.pending.pop(event['kind'], None)
         self.pending[event['kind']] = event
         self.wake.set()

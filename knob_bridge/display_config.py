@@ -29,10 +29,13 @@ def device_entry_packet(*, version, total, slot, name, ptype, component=1,
     return header + payload + struct.pack('<H', binascii.crc_hqx(payload, 0))
 
 
-def test_menu_packets(version, *, restore=False, color_controls=False):
+def test_menu_packets(version, *, restore=False, color_controls=False, separate_controls=False):
     rows = [('Relay 1', 24, 1), ('Relay 2', 24, 2)]
     if not restore:
-        rows.append(('HA Lights', 4 if color_controls else 2, 1))
+        rows.append(('RGB Lights' if separate_controls else 'HA Lights',
+                     2 if separate_controls else (4 if color_controls else 2), 1))
+        if separate_controls:
+            rows.extend([('Warm White', 2, 1), ('Red 10%', 1, 1)])
     return [device_entry_packet(version=version, total=len(rows), slot=i,
                                 name=name, ptype=ptype, component=component,
                                 sequence=i)

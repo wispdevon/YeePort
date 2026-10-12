@@ -1,6 +1,6 @@
 {
   "name": "YeeGate S Knob",
-  "version": "0.5.2",
+  "version": "0.6.1",
   "slug": "yeegate_knob",
   "description": "Local S Knob authenticated brightness/power control, MQTT actions, clock and weather",
   "arch": [
@@ -43,7 +43,11 @@
     "light_entity": "light.knob_lights",
     "color_controls_enabled": false,
     "brightness_speed_scaling": false,
-    "brightness_maximum_gain": 4
+    "brightness_maximum_gain": 4,
+    "separate_brightness_controls": false,
+    "warm_white_kelvin": 2700,
+    "preset_scene": "scene.usual_red_10",
+    "independent_channels": true
   },
   "schema": {
     "address": "match(^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$)",
@@ -68,7 +72,17 @@
     "light_entity": "match(^light\\.[a-z0-9_]+$)",
     "color_controls_enabled": "bool",
     "brightness_speed_scaling": "bool",
-    "brightness_maximum_gain": "int(1,8)"
+    "brightness_maximum_gain": "int(1,8)",
+    "separate_brightness_controls": "bool",
+    "warm_white_kelvin": "int(1000,10000)",
+    "preset_scene": "match(^scene\\.[a-z0-9_]+$)",
+    "independent_channels": "bool"
   },
-  "homeassistant_api": true
+  "homeassistant_api": true,
+  "map": [
+    {
+      "type": "share",
+      "read_only": false
+    }
+  ]
 }

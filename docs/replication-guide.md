@@ -28,6 +28,21 @@ The owner confirmed the following on the physical unit with bridge 0.5.1;
 
 Haptic strength has no verified setting. Effects are not implemented.
 
+Version 0.6.1 adds an optional separate menu with RGB Lights, Warm White and
+Red 10%. Enable `separate_brightness_controls` to use it. With `independent_channels` enabled, each ring preserves the other channel's
+level on native RGBW/RGBWW devices. RGB-only devices follow RGB while it is
+above zero and use warm-white temperature mode when RGB is zero;
+`warm_white_kelvin` defaults to 2700 K for this fallback. Create a persistent HA
+scene with pure-red native RGB/RGBW/RGBWW values, zero white channels, brightness
+26 out of 255, and state on for the target members. Point `preset_scene` at its
+entity ID. The owner's scene is `scene.usual_red_10`, named Usual Red 10%.
+These HA actions were exercised successfully and the English labels uploaded;
+the owner confirmed the English entries and live RGB/preset commands.
+Independent blending passed live HA tests. The owner also confirmed the physical
+Warm White ring increases white light while RGB stays on.
+See the [bridge guide](../knob_bridge/DOCS.md#red-preset-and-separate-menu-labels)
+for the private, one-time label bundle. No firmware flash is part of this change.
+
 In 0.5.2, color commands address each available group member using its native
 RGB/RGBW/RGBWW field, explicitly zeroing white channels and leaving brightness
 unchanged. A live API check verified zero white channels on both Wiz devices
