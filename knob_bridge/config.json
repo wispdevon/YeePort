@@ -1,6 +1,6 @@
 {
   "name": "YeeGate S Knob",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "slug": "yeegate_knob",
   "description": "Local S Knob authenticated brightness/power control, MQTT actions, clock and weather",
   "arch": [

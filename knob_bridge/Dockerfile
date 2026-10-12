@@ -1,5 +1,5 @@
 FROM python:3.13-slim
-ARG BUILD_VERSION=0.5.1
+ARG BUILD_VERSION=0.5.2
 ARG BUILD_ARCH=amd64
 LABEL io.hass.version=$BUILD_VERSION io.hass.type="app" io.hass.arch=$BUILD_ARCH
 WORKDIR /app

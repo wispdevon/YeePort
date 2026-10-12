@@ -9,12 +9,29 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "knob_bridge"))
-from light_control import BrightnessScaling, LightReceiver, LightWorker, service_payload
+from light_control import BrightnessScaling, LightReceiver, LightWorker, service_payload, pure_color_services
 from knob_mesh_commands import decode_light_command, VENDOR_OPCODE
 from light_sync import light_display_state
 
 
 class LightServiceMapping(unittest.TestCase):
+    def test_mixed_group_color_disables_all_white_channels(self):
+        def state(modes, **extra):
+            return {'state': 'on', 'attributes': {'supported_color_modes': modes, **extra}}
+        states = {'light.group': state(['rgbww'], entity_id=['light.warm', 'light.strip', 'light.rgb',
+                         'light.offline', 'light.white', 'light.nested']),
+                  'light.nested': state(['rgbww'], entity_id=['light.warm', 'light.group']),
+                  'light.warm': state(['color_temp', 'rgbww'], rgbww_color=[10, 20, 30, 61, 61]),
+                  'light.strip': state(['rgbw'], rgbw_color=[10, 20, 30, 38]),
+                  'light.rgb': state(['rgb']), 'light.white': state(['color_temp']),
+                  'light.offline': {'state': 'unavailable', 'attributes': {'supported_color_modes': ['rgb']}}}
+        calls = pure_color_services('light.group', {'kind': 'color', 'value': [255, 36, 33]}, states)
+        self.assertEqual(calls, [('turn_on', {'entity_id': 'light.warm', 'rgbww_color': [255, 36, 33, 0, 0]}),
+                                ('turn_on', {'entity_id': 'light.strip', 'rgbw_color': [255, 36, 33, 0]}),
+                                ('turn_on', {'entity_id': 'light.rgb', 'rgb_color': [255, 36, 33]})])
+        self.assertEqual(pure_color_services('light.group', {'kind': 'color_temperature', 'value': 4000}, states),
+                         [('turn_on', {'entity_id': 'light.group', 'color_temp_kelvin': 4000})])
+
     def test_speed_scaling_fine_fast_endpoints_and_feedback(self):
         scaler = BrightnessScaling(True, 4)
         scaler.rebase(50)

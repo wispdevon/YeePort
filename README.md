@@ -14,7 +14,11 @@ not been validated.
 The owner confirmed that the knob's English **HA Lights** screen controls the
 Home Assistant group `light.knob_lights`: brightness, on/off, RGB color and
 Kelvin color temperature all work. On the knob, scroll to **HA Lights** and
-hold its icon to open the controls. The installed bridge is version 0.5.1.
+hold its icon to open the controls. The bridge release is version 0.5.2.
+
+Color mode explicitly zeros RGBW/RGBWW white channels and preserves brightness.
+Use its brightness ring to dim the selected RGB color; use temperature control
+separately for warm/cool white lighting.
 
 The bridge also publishes assignable English Home Assistant triggers for
 authenticated knob light commands, synchronizes Bangkok time/date, and updates
@@ -59,7 +63,7 @@ uppercase path placeholder with your own file path:
 
 The dependency installation and public-source tests were checked in a fresh
 virtual environment. Tests requiring private captures or an external firmware
-reference skip when those inputs are absent. The full owner's 15-test suite
+reference skip when those inputs are absent. The full owner's 16-test suite
 also passed. Firmware builders reproduced the exact candidate hashes used on
 the device, and offline decoding revalidated all 57 brightness-capture packets.
 These checks do not repeat firmware flashing.

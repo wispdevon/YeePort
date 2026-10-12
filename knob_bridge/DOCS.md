@@ -1,6 +1,6 @@
 # YeeGate S Knob
 
-Version 0.5.1 decrypts and authenticates this provisioned S Knob's light commands
+Version 0.5.2 decrypts and authenticates this provisioned S Knob's light commands
 locally. Its third entry, **HA Lights**, controls the configured Home Assistant
 light group. Clock and weather synchronization remain local. No Yeelight login
 or cloud credentials are used during operation.
@@ -15,8 +15,12 @@ mapped by this light-control feature.
 
 Enable `color_controls_enabled` for the built-in full-color light interface.
 The existing English **HA Lights** entry then exposes brightness, white color
-temperature and RGB color controls. Color commands use Home Assistant's
-`rgb_color`; temperature commands use `color_temp_kelvin`. Individual lights
+temperature and RGB color controls. Color targets each available member in its
+native mode: `rgbww_color: [R,G,B,0,0]`, `rgbw_color: [R,G,B,0]`, or
+`rgb_color: [R,G,B]`. This explicitly switches off warm/cool white LEDs instead
+of letting a mixed light group convert color into white-channel output.
+Color changes preserve each light's brightness; brightness changes then dim
+the selected RGB color. Temperature commands separately use `color_temp_kelvin`. Individual lights
 may have different supported ranges or be unavailable. Changing color does not
 explicitly change brightness. This feature is recovered from firmware handlers
 4200df84 and 4200d25c; the owner confirmed physical color/temperature control.

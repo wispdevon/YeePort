@@ -336,3 +336,18 @@ private Mesh and MQTT credentials outside the workspace.
 
 The owner subsequently confirmed RGB color and white temperature control with
 “works great.” The full-color controls are now physically verified on this unit.
+
+
+### RGB-only color selection (0.5.2)
+
+The owner requested color and color brightness without warm/cool white mixing.
+Live HA state initially showed Wiz RGBWW channels [255,0,10,61,61] and Wiz RGBW
+channels [255,3,0,38]. Color control now resolves available light-group members
+and sends their native RGBWW/RGBW/RGB field with all white channels explicitly
+zero, without a brightness field. An immediate live test preserved brightness
+26/26/18 on the three available lights and reported both Wiz white outputs zero.
+The Pi bridge is running 0.5.2. Subsequent authenticated knob color commands
+were applied through the new bridge, and both Wiz devices still report zero
+white channels. Temperature control remains a separate Kelvin operation.
+All 16 tests pass, including mixed groups with duplicate/nested members,
+unavailable members, and white-only lights. Repository docs record the behavior.

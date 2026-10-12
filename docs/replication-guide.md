@@ -7,7 +7,8 @@ local Mesh bridge, not a gateway emulator registered through the Yeelight app.
 
 ## What is verified
 
-The owner confirmed the following on the physical unit with bridge 0.5.1:
+The owner confirmed the following on the physical unit with bridge 0.5.1;
+0.5.2 adds explicit RGB-only channel selection:
 
 - The knob's English **HA Lights** entry controls a Home Assistant light group.
   Hold the entry's icon to open controls; brightness, on/off, RGB color and
@@ -26,6 +27,12 @@ The owner confirmed the following on the physical unit with bridge 0.5.1:
   The displayed ring catches up after the turn.
 
 Haptic strength has no verified setting. Effects are not implemented.
+
+In 0.5.2, color commands address each available group member using its native
+RGB/RGBW/RGBWW field, explicitly zeroing white channels and leaving brightness
+unchanged. A live API check verified zero white channels on both Wiz devices
+and unchanged brightness on all three available color lights. Temperature mode
+continues to use warm/cool white channels independently.
 
 ## Requirements
 

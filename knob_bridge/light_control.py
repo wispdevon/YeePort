@@ -140,12 +140,65 @@ def call_light(entity, event):
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
         raise RuntimeError("Home Assistant app API access is required")
-    request = Request("http://supervisor/core/api/services/light/" + service,
-                      data=json.dumps(payload).encode(), method="POST",
-                      headers={"Authorization": "Bearer " + token,
-                               "Content-Type": "application/json"})
-    with urlopen(request, timeout=10) as response:
-        response.read()
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    calls = [(service, payload)]
+    if event['kind'] == 'color':
+        request = Request('http://supervisor/core/api/states', headers=headers)
+        with urlopen(request, timeout=10) as response:
+            states = {state['entity_id']: state for state in json.load(response)}
+        calls = pure_color_services(entity, event, states)
+    for service, payload in calls:
+        request = Request("http://supervisor/core/api/services/light/" + service,
+                          data=json.dumps(payload).encode(), method="POST", headers=headers)
+        with urlopen(request, timeout=10) as response:
+            response.read()
+
+
+def pure_color_services(entity, event, states):
+    """Target leaf lights in their native color mode, with every white LED off.
+
+    Sending RGB to a mixed HA light group can convert it to RGBWW then RGBW,
+    introducing white channels. Avoid those conversions with per-light fields.
+    Brightness is intentionally omitted so each lamp retains its brightness.
+    """
+    service, payload = service_payload(entity, event)
+    if event['kind'] != 'color':
+        return [(service, payload)]
+    rgb, visited, calls = payload['rgb_color'], set(), []
+
+    def visit(target):
+        if not re.fullmatch(r'light\.[a-z0-9_]+', target):
+            raise ValueError('Invalid light group member')
+        if target in visited:
+            return
+        visited.add(target)
+        if len(visited) > 128:
+            raise ValueError('Light group is too large')
+        state = states.get(target)
+        if state is None or state.get('state') in ('unavailable', 'unknown'):
+            return
+        attributes = state.get('attributes', {})
+        members = attributes.get('entity_id')
+        if isinstance(members, list):
+            for member in members:
+                visit(member)
+            return
+        modes = attributes.get('supported_color_modes', [])
+        data = {'entity_id': target}
+        if 'rgbww' in modes:
+            data['rgbww_color'] = rgb + [0, 0]
+        elif 'rgbw' in modes:
+            data['rgbw_color'] = rgb + [0]
+        elif any(mode in modes for mode in ('rgb', 'hs', 'xy')):
+            data['rgb_color'] = rgb.copy()
+        else:
+            return
+        calls.append(('turn_on', data))
+
+    visit(entity)
+    if not calls:
+        raise ValueError('No available color lights in the configured target')
+    return calls
 
 
 class LightWorker:
