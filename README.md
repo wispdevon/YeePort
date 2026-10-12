@@ -36,20 +36,28 @@ are not implemented.
 ## How local control works
 
 ```mermaid
-flowchart LR
-    knob["S Knob<br/>Turn, touch and hold"]
-    bridge["YeePort bridge<br/>Running on your HAOS Pi"]
-    ha["Home Assistant<br/>Light actions"]
-    lights["Your lights<br/>Brightness, RGB and white temperature"]
-    mqtt["MQTT<br/>Assignable automation triggers"]
+---
+config:
+  htmlLabels: false
+  flowchart:
+    padding: 24
+    nodeSpacing: 55
+    rankSpacing: 65
+---
+flowchart TD
+    knob["S Knob"]
+    bridge["YeePort on the HAOS Pi"]
+    ha["Home Assistant"]
+    lights["Your lights"]
+    mqtt["MQTT triggers"]
 
-    knob -->|Encrypted Bluetooth Mesh| bridge
-    bridge -->|Authenticate and decode commands| ha
-    ha -->|Control available group members| lights
-    bridge -->|Publish decoded events| mqtt
-    mqtt -->|Custom automations| ha
-    ha -.->|Light state and outdoor weather| bridge
-    bridge -.->|Display state, time and weather over BLE| knob
+    knob -->|BLE Mesh| bridge
+    bridge -->|Decoded commands| ha
+    ha -->|Light actions| lights
+    bridge -->|Events| mqtt
+    mqtt -->|Automations| ha
+    ha -.->|State and weather| bridge
+    bridge -.->|Display sync| knob
 ```
 
 Solid arrows show control and event delivery. Dashed arrows show feedback to
@@ -57,6 +65,27 @@ the knob. The bridge authenticates both Mesh layers before acting on a command;
 normal operation follows this local path without a Yeelight cloud connection.
 
 ### Using the knob
+
+```mermaid
+---
+config:
+  htmlLabels: false
+  flowchart:
+    padding: 24
+    nodeSpacing: 55
+    rankSpacing: 65
+---
+flowchart TD
+    wake["1. Wake the knob"]
+    select["2. Select HA Lights"]
+    hold["3. Hold the light icon"]
+    mode["4. Choose brightness, RGB or Kelvin"]
+    turn["5. Turn the knob"]
+    response["6. Home Assistant changes the lights"]
+    feedback["7. Pause for display feedback"]
+
+    wake --> select --> hold --> mode --> turn --> response --> feedback
+```
 
 1. Scroll to the English **HA Lights** entry.
 2. Hold its icon to open the light controls.
@@ -77,24 +106,27 @@ successful path on the tested unit; the [replication guide](docs/replication-gui
 contains its commands, private-file requirements and device-specific limits.
 
 ```mermaid
+---
+config:
+  htmlLabels: false
+  flowchart:
+    padding: 24
+    nodeSpacing: 55
+    rankSpacing: 65
+---
 flowchart TD
-    account["1. Add the knob to your Yeelight account<br/>Authorize the setup login"]
-    provision["2. Complete vendor provisioning<br/>Save the private binding response and device key"]
-    english["Optional: English screen setup<br/>Upload labels and install the English ESP patch"]
-    diagnostic["3. Install the temporary BG21 diagnostic<br/>Authenticate and export the per-unit factory secret"]
-    keys["4. Recover NetKey and AppKey from the binding<br/>Verify network and application MICs against captures"]
-    restore["5. Restore stock BG21 firmware<br/>Verify that the diagnostic export is gone"]
-    install["6. Install the HAOS bridge and configure private keys<br/>Select your HA light group and enable the controls"]
-    use["Use HA Lights locally<br/>Brightness, RGB, temperature, clock and weather"]
+    account["1. Add knob and authorize login"]
+    provision["2. Provision and save private binding"]
+    english["3. Optional English labels and ESP patch"]
+    diagnostic["4. BG21 diagnostic and secret export"]
+    keys["5. Recover keys and verify both MICs"]
+    restore["6. Restore stock BG21 and verify"]
+    install["7. Install HAOS bridge and MQTT"]
+    configure["8. Set private keys and HA light group"]
+    enable["9. Enable controls and use HA Lights"]
 
-    account --> provision
-    provision --> diagnostic
-    provision -.-> english
-    diagnostic --> keys
-    keys --> restore
-    restore --> install
-    english -.-> install
-    install --> use
+    account --> provision --> english --> diagnostic --> keys
+    keys --> restore --> install --> configure --> enable
 ```
 
 The knob has two processors: **ESP32-S3** handles its display, while **BG21**
