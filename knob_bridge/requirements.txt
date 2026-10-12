@@ -1,0 +1,4 @@
+bleak==2.1.1
+paho-mqtt==2.1.0
+tzdata>=2026.1,<2027
+cryptography>=46,<47

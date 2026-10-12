@@ -1,0 +1,4 @@
+bleak>=0.22,<3
+dbus-fast>=1.83,<6; sys_platform == "linux"
+cryptography>=43,<48
+qrcode[pil]>=8,<9

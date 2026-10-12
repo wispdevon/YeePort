@@ -1,0 +1,49 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Login artifacts and local secrets
+yeelight-login.png
+credentials.json
+*-credentials.json
+private*.json
+secrets*.json
+*-account*.json
+*-binding*.json
+*-provision*.json
+*-keys.json
+
+# Device captures, protocol output, and logs (review before sharing)
+*-capture.jsonl
+*-capture.btsnoop
+*.btsnoop
+ble-capture.jsonl
+knob-*.json
+gateway-events.jsonl
+connection-calls.txt
+*.log
+
+# Firmware and generated vendor assets
+*.gbl
+*.bin
+*.hex
+*.png
+artifacts/
+captures/
+exports/
+firmware/
+
+# All raw/event/decrypted streams are private by default
+*.jsonl
+*.zip
+homeassistant.json
+*options.json
+*deploy*.json
+knob-authenticated-export*
+knob-factory-secret*
+ha-deploy-key*
+*.pem
+*.key
+PRIVATE*
+OWNER_VERIFIED*
+OUTPUT.analysis*

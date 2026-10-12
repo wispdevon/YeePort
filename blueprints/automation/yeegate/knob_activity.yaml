@@ -1,0 +1,36 @@
+blueprint:
+  name: Yeelight S Knob — Assign an action
+  description: >-
+    Choose what Home Assistant should do when the knob sends Mesh activity.
+    This experimental bridge does not distinguish press, hold, or rotation.
+    Periodic knob traffic may also trigger the action.
+  domain: automation
+  input:
+    knob:
+      name: Knob activity entity
+      default: event.knob_mesh_activity
+      selector:
+        entity:
+          filter:
+            - domain: event
+              integration: mqtt
+    assigned_action:
+      name: Assigned action
+      description: Choose the lights, scenes, scripts, or other actions to run.
+      default: []
+      selector:
+        action: {}
+triggers:
+  - trigger: state
+    entity_id: !input knob
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.attributes.get('event_type') == 'mesh_activity'
+         and trigger.from_state.state != trigger.to_state.state }}
+actions: !input assigned_action
+mode: single
+max_exceeded: silent
