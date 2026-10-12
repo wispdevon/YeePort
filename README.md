@@ -1,5 +1,8 @@
 # YeePort
 
+[![Home Assistant website](https://img.shields.io/badge/Home_Assistant-Website-18BCF2?style=for-the-badge&logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![Yeelight S Knob product page](https://img.shields.io/badge/Yeelight_S_Knob-Product_Page-FF8B00?style=for-the-badge)](https://cn.yeelight.com/zh_CN/pro-detail?id=93)
+
 YeePort connects a **Yeelight Pro S Knob** to **Home Assistant OS** over local
 Bluetooth Mesh. Use the knob to control your HA lights' brightness, color and
 white temperature, with English menus and local clock/weather updates.
@@ -29,6 +32,82 @@ The scaling logic and curve were tested; the user's physical feel of that curve
 has not been confirmed. The knob's own ring catches up to Home Assistant after
 the turn ends. Haptic strength is not verified as configurable, and knob effects
 are not implemented.
+
+## How local control works
+
+```mermaid
+flowchart LR
+    knob["S Knob<br/>Turn, touch and hold"]
+    bridge["YeePort bridge<br/>Running on your HAOS Pi"]
+    ha["Home Assistant<br/>Light actions"]
+    lights["Your lights<br/>Brightness, RGB and white temperature"]
+    mqtt["MQTT<br/>Assignable automation triggers"]
+
+    knob -->|Encrypted Bluetooth Mesh| bridge
+    bridge -->|Authenticate and decode commands| ha
+    ha -->|Control available group members| lights
+    bridge -->|Publish decoded events| mqtt
+    mqtt -->|Custom automations| ha
+    ha -.->|Light state and outdoor weather| bridge
+    bridge -.->|Display state, time and weather over BLE| knob
+```
+
+Solid arrows show control and event delivery. Dashed arrows show feedback to
+the knob. The bridge authenticates both Mesh layers before acting on a command;
+normal operation follows this local path without a Yeelight cloud connection.
+
+### Using the knob
+
+1. Scroll to the English **HA Lights** entry.
+2. Hold its icon to open the light controls.
+3. Choose brightness, RGB color, or white color temperature, then turn the knob.
+4. Home Assistant applies the change; the knob receives updated state when idle.
+
+| Control | What changes |
+| --- | --- |
+| Brightness | Dims the selected color or white mode; 0% turns the lights off. |
+| RGB color | Sets the color with warm/cool white channels off; preserves brightness. |
+| White temperature | Selects warm/cool white lighting using Kelvin. |
+| On/off | Controls the configured HA light group. |
+
+## The setup journey we verified
+
+The one-time setup has more steps than everyday use. This diagram records the
+successful path on the tested unit; the [replication guide](docs/replication-guide.md)
+contains its commands, private-file requirements and device-specific limits.
+
+```mermaid
+flowchart TD
+    account["1. Add the knob to your Yeelight account<br/>Authorize the setup login"]
+    provision["2. Complete vendor provisioning<br/>Save the private binding response and device key"]
+    english["Optional: English screen setup<br/>Upload labels and install the English ESP patch"]
+    diagnostic["3. Install the temporary BG21 diagnostic<br/>Authenticate and export the per-unit factory secret"]
+    keys["4. Recover NetKey and AppKey from the binding<br/>Verify network and application MICs against captures"]
+    restore["5. Restore stock BG21 firmware<br/>Verify that the diagnostic export is gone"]
+    install["6. Install the HAOS bridge and configure private keys<br/>Select your HA light group and enable the controls"]
+    use["Use HA Lights locally<br/>Brightness, RGB, temperature, clock and weather"]
+
+    account --> provision
+    provision --> diagnostic
+    provision -.-> english
+    diagnostic --> keys
+    keys --> restore
+    restore --> install
+    english -.-> install
+    install --> use
+```
+
+The knob has two processors: **ESP32-S3** handles its display, while **BG21**
+handles Bluetooth Mesh. The English patch changed the ESP application; the
+temporary key-export diagnostic changed BG21 and was then removed by restoring
+stock BG21 firmware. Restoring BG21 preserved the English display.
+
+**Firmware research is the difficult part.** The images and scripts are tied to
+the exact 1.4.25 package and the tested unit. Recovery/rollback is unverified;
+a failed BG21 update can remove BLE access. Each owner needs their own device
+records and keys, and must review the hardcoded address guards before adapting
+this setup. The guide records our successful procedure rather than presenting
+an automatic installer for other knobs.
 
 ## Deployment and replication
 
