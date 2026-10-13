@@ -5,6 +5,7 @@ provisioning, factory settings, or relay output commands are constructed.
 """
 import binascii
 import struct
+from light_imports import CONTROL_TYPES
 
 
 def device_entry_packet(*, version, total, slot, name, ptype, component=1,
@@ -30,7 +31,7 @@ def device_entry_packet(*, version, total, slot, name, ptype, component=1,
 
 
 def test_menu_packets(version, *, restore=False, color_controls=False, separate_controls=False,
-                      ha_lights_menu=False):
+                      ha_lights_menu=False, imported_lights=()):
     rows = [('Relay 1', 24, 1), ('Relay 2', 24, 2)]
     if not restore:
         rows.append(('RGB Lights' if separate_controls else 'HA Lights',
@@ -39,6 +40,10 @@ def test_menu_packets(version, *, restore=False, color_controls=False, separate_
             rows.extend([('Warm White', 2, 1), ('Red 10%', 1, 1)])
             if ha_lights_menu:
                 rows.append(('HA Lights', 4, 1))
+        for row in imported_lights:
+            if row['slot'] != len(rows) + 1:
+                raise ValueError('Imported menu slots must follow the existing entries')
+            rows.append((row['name'], CONTROL_TYPES[row['controls']], 1))
     return [device_entry_packet(version=version, total=len(rows), slot=i,
                                 name=name, ptype=ptype, component=component,
                                 sequence=i)

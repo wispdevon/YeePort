@@ -23,6 +23,7 @@ from clock_sync import run_clock_sync
 from weather_sync import run_weather_sync
 from light_control import LightReceiver, LightWorker, SeparateLightController
 from light_sync import run_light_sync
+from light_imports import imported_menu
 
 
 def mqtt_settings(options):
@@ -110,7 +111,8 @@ async def run(options):
         raise ValueError("Verified Mesh keys are required for light control")
     light_worker = LightWorker(options.get("light_entity", "light.knob_lights")) if (
         receiver is not None and options.get("light_control_enabled", False)) else None
-    if light_worker and options.get('separate_brightness_controls', False):
+    imports = imported_menu(options)
+    if light_worker and (options.get('separate_brightness_controls', False) or imports):
         light_worker.callback = SeparateLightController(options)
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                          client_id="yeegate-knob-" + address.replace(":", "").lower())
@@ -234,7 +236,9 @@ async def run(options):
                     independent_channels=options.get('independent_channels', False),
                     on_levels_feedback=getattr(light_worker.callback, 'sync_feedback', None),
                     ha_lights_menu=options.get('ha_lights_menu_enabled', False),
-                    on_group_feedback=receiver.group_scaling.rebase))
+                    on_group_feedback=receiver.group_scaling.rebase,
+                    imported_lights=imports, display_device_key=options.get('display_device_key', ''),
+                    on_import_feedback=receiver.import_feedback))
             clock_task = asyncio.create_task(run_clock_sync(
                 options, stopped, lock=local_gatt_lock, suppress_activity=suppress_activity,
                 find_device=find_device))

@@ -15,6 +15,7 @@ from knob_mesh_commands import decode_light_command
 from mesh import fields
 from mesh_crypto import decrypt_network
 from channel_control import (blend_services, independent_display_state, light_members, selected_rgb)
+from light_imports import imported_menu
 
 
 class BrightnessScaling:
@@ -70,6 +71,11 @@ class LightReceiver:
                                          options.get('brightness_maximum_gain', 4))
         self.separate = options.get('separate_brightness_controls', False)
         self.supergroup = self.separate and options.get('ha_lights_menu_enabled', False)
+        self.imports = {row['slot']: row for row in imported_menu(options)}
+        self.imports_ready = not self.imports
+        self.import_scaling = {slot: BrightnessScaling(options.get('brightness_speed_scaling', False),
+                              options.get('brightness_maximum_gain', 4)) for slot in self.imports}
+        self.slots = tuple((3, 4, 5, 6) if self.supergroup else ((3, 4, 5) if self.separate else (3,))) + tuple(self.imports)
         self.group_scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
                                                options.get('brightness_maximum_gain', 4))
         self.warm_scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
@@ -93,14 +99,19 @@ class LightReceiver:
                 command = decode_light_command(packet, net_key=self.net_key,
                             app_key=self.app_key, device_key=None, iv_index=self.iv_index,
                             source_address=self.source,
-                            slot=(3, 4, 5, 6) if self.supergroup else ((3, 4, 5) if self.separate else 3))
+                            slot=self.slots)
             except (ValueError, InvalidTag):
                 continue
             if command is None or command.sequence <= self.highest:
                 continue
-            if command.slot == 4 and command.kind not in ('brightness', 'power'):
+            imported = self.imports.get(command.slot)
+            if imported and (not self.imports_ready or
+                    (imported['controls'] == 'switch' and command.kind != 'power') or
+                    (imported['controls'] == 'brightness' and command.kind not in ('brightness', 'power'))):
                 continue
-            if command.slot == 5 and command.kind != 'power':
+            if self.separate and command.slot == 4 and command.kind not in ('brightness', 'power'):
+                continue
+            if self.separate and command.slot == 5 and command.kind != 'power':
                 continue
             # Destination is authenticated inside the network PDU; confirm the
             # exact observed publication address before acting on this slot.
@@ -118,23 +129,32 @@ class LightReceiver:
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
             event = asdict(command)
-            if command.slot == 5:
+            if imported:
+                event.update(imported=True, entity_id=imported['entity_id'], name=imported['name'])
+            elif self.separate and command.slot == 5:
                 event.update(kind='scene', value='usual_red_10')
                 self.scaling.rebase(10)
                 self.warm_scaling.rebase(0)
                 self.group_scaling.rebase(10)
-            elif command.slot == 4:
+            elif self.separate and command.slot == 4:
                 event['kind'] = 'warm_brightness' if command.kind == 'brightness' else 'warm_power'
             if command.kind == 'brightness':
                 event['raw_percentage'] = command.value
-                scaling = (self.group_scaling if command.slot == 6 else
+                scaling = (self.import_scaling[command.slot] if imported else
+                           self.group_scaling if command.slot == 6 else
                            self.warm_scaling if command.slot == 4 else self.scaling)
                 event['value'] = scaling.apply(command.value, self.last_command)
             event.update(event_type=event['kind'] if event['kind'] not in ('power', 'warm_power') else
-                         (('warm_' if command.slot == 4 else '') + ('power_on' if command.value else 'power_off')),
+                         (('warm_' if self.separate and command.slot == 4 else '') + ('power_on' if command.value else 'power_off')),
                          address=self.address, rssi=rssi, authenticated=True,
                          timestamp=datetime.now(timezone.utc).isoformat())
             yield event
+
+    def import_feedback(self, levels):
+        for slot, state in levels.items():
+            if state is not None:
+                self.import_scaling[slot].rebase(state[1])
+        self.imports_ready = True
 
 
 def service_payload(entity, event):
@@ -267,6 +287,8 @@ class SeparateLightController:
         self.rgb_level = self.warm_level = 10
         self.independent = options.get('independent_channels', False)
         self.initialized = False
+        self.separate = options.get('separate_brightness_controls', True)
+        self.imports = {row['slot']: row for row in imported_menu(options)}
 
     def sync_feedback(self, state):
         if self.independent and state:
@@ -283,8 +305,10 @@ class SeparateLightController:
             self.initialized = True
             return
         states = {state['entity_id']: state for state in self.request('states')}
-        if event.get('slot') == 6:
-            for service, data in pure_color_services(entity, event, states):
+        imported = self.imports.get(event.get('slot'))
+        if imported or event.get('slot') == 6 or not self.separate:
+            target = imported['entity_id'] if imported else entity
+            for service, data in pure_color_services(target, event, states):
                 self.request('services/light/' + service, data)
             # The whole-group action can change both channels. Read their new
             # levels before the next independent-channel action.
@@ -351,7 +375,11 @@ class LightWorker:
         self.wake = asyncio.Event()
 
     def submit(self, event):
-        if event['kind'] == 'scene' or (event.get('slot') == 6 and
+        if event.get('imported') and event['kind'] == 'power' and event['value'] is False:
+            for key, pending in list(self.pending.items()):
+                if pending.get('entity_id') == event['entity_id']:
+                    self.pending.pop(key)
+        elif event['kind'] == 'scene' or (event.get('slot') == 6 and not event.get('imported') and
                                       event['kind'] == 'power' and event['value'] is False):
             self.pending.clear()
         elif event['kind'] in ('power', 'warm_power') and event['value'] is False:
@@ -361,8 +389,9 @@ class LightWorker:
                     self.pending.pop(kind, None)
             else:
                 self.pending.clear()
-        self.pending.pop(event['kind'], None)
-        self.pending[event['kind']] = event
+        key = (event['slot'], event['kind']) if event.get('imported') else event['kind']
+        self.pending.pop(key, None)
+        self.pending[key] = event
         self.wake.set()
 
     async def run(self):
@@ -376,10 +405,10 @@ class LightWorker:
                 for event in events:
                     try:
                         await asyncio.to_thread(self.callback, self.entity, event)
-                        print(json.dumps({"light_control": "applied", "entity_id": self.entity,
+                        print(json.dumps({"light_control": "applied", "entity_id": event.get('entity_id', self.entity),
                                           "kind": event["kind"], "value": event["value"]}), flush=True)
                     except Exception as exc:
-                        print(json.dumps({"light_control": "failed", "entity_id": self.entity,
+                        print(json.dumps({"light_control": "failed", "entity_id": event.get('entity_id', self.entity),
                                           "error": type(exc).__name__}), flush=True)
             finally:
                 self.busy = False

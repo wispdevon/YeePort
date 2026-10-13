@@ -13,6 +13,7 @@ from clock_sync import KNOB_ADDRESS, DISPLAY_CHARACTERISTIC
 from display_config import light_state_packet, color_light_state_packet, test_menu_packets
 from knob_display_codec import label_packet
 from channel_control import independent_display_state
+from light_imports import render_label
 
 
 def light_display_state(state, *, color_controls=False, separate_controls=False):
@@ -42,30 +43,47 @@ def light_display_state(state, *, color_controls=False, separate_controls=False)
 
 
 def read_light_state(entity, color_controls=False, separate_controls=False, independent_channels=False,
-                     ha_lights_menu=False):
+                     ha_lights_menu=False, imported_lights=()):
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
         raise RuntimeError("Home Assistant app API access is required")
-    request = Request("http://supervisor/core/api/states" + ('' if independent_channels else '/' + entity),
+    all_states = independent_channels or bool(imported_lights)
+    request = Request("http://supervisor/core/api/states" + ('' if all_states else '/' + entity),
                       headers={"Authorization": "Bearer " + token})
     with urlopen(request, timeout=10) as response:
-        if independent_channels:
+        if all_states:
             states = {s['entity_id']: s for s in json.load(response)}
-            result = independent_display_state(entity, states)
             group = states.get(entity, {})
         else:
             group = json.load(response)
-            result = light_display_state(group, color_controls=color_controls,
-                                         separate_controls=separate_controls)
+        result = (independent_display_state(entity, states) if independent_channels else
+                  light_display_state(group, color_controls=color_controls, separate_controls=separate_controls))
         if result is not None and separate_controls and ha_lights_menu:
             full_color = light_display_state(group, color_controls=True)
             if full_color is None:
                 return None
             result['group'] = full_color
+        if result is not None and imported_lights:
+            if not isinstance(result, dict):
+                result = {'primary': result}
+            result['imports'] = {row['slot']: light_display_state(states.get(row['entity_id'], {}),
+                                      color_controls=row['controls'] == 'color') for row in imported_lights}
         return result
 
 
-async def send_light_state(device, state, busy, *, initialize_menu=False):
+async def write_display_packet(client, packet):
+    for offset in range(0, len(packet), 20):
+        chunk = packet[offset:offset + 20]
+        if offset + len(chunk) == len(packet):
+            chunk += b'\xff' * ((-len(chunk)) % 4)
+        await client.write_gatt_char(DISPLAY_CHARACTERISTIC, chunk, response=True)
+        await asyncio.sleep(.05)
+
+
+async def send_light_state(device, state, busy, *, initialize_menu=False,
+                            imported_lights=(), display_device_key=''):
+    separate = isinstance(state, dict) and 'rgb' in state
+    primary = state.get('primary') if isinstance(state, dict) else state
     async with BleakClient(device, timeout=20) as client:
         replies = asyncio.Queue()
         await client.start_notify(DISPLAY_CHARACTERISTIC,
@@ -80,18 +98,14 @@ async def send_light_state(device, state, busy, *, initialize_menu=False):
             # Rehydrate entry types before their state setters, preserving both
             # relay entries and the existing label indices.
             for entry in test_menu_packets(int(time.time()) & 255,
-                                          color_controls=not isinstance(state, dict) and len(state) == 4,
-                                          separate_controls=isinstance(state, dict),
-                                          ha_lights_menu=isinstance(state, dict) and 'group' in state):
-                for offset in range(0, len(entry), 20):
-                    chunk = entry[offset:offset + 20]
-                    if offset + len(chunk) == len(entry):
-                        chunk += b"\xff" * ((-len(chunk)) % 4)
-                    await client.write_gatt_char(DISPLAY_CHARACTERISTIC, chunk, response=True)
-                    await asyncio.sleep(.05)
+                                          color_controls=not separate and len(primary) == 4,
+                                          separate_controls=separate,
+                                          ha_lights_menu=separate and 'group' in state,
+                                          imported_lights=imported_lights):
+                await write_display_packet(client, entry)
                 await asyncio.sleep(.15)
             label_file = Path('/share/yeeport-display-labels.json')
-            if isinstance(state, dict) and label_file.exists():
+            if separate and label_file.exists():
                 bundle = json.loads(label_file.read_text())
                 expected = [(2, 'RGB Lights'), (3, 'Warm White'), (4, 'Red 10%')]
                 if 'group' in state:
@@ -103,15 +117,16 @@ async def send_light_state(device, state, busy, *, initialize_menu=False):
                     packet = label_packet(base64.b64decode(label['png'], validate=True),
                                           image_type=2, index=label['index'],
                                           device_key=bytes.fromhex(bundle['device_key']))
-                    for offset in range(0, len(packet), 20):
-                        chunk = packet[offset:offset + 20]
-                        if offset + len(chunk) == len(packet):
-                            chunk += b'\xff' * ((-len(chunk)) % 4)
-                        await client.write_gatt_char(DISPLAY_CHARACTERISTIC, chunk, response=True)
-                        await asyncio.sleep(.05)
+                    await write_display_packet(client, packet)
                     print(json.dumps({'display_label_uploaded': label['label']}), flush=True)
                 label_file.unlink()
-        if isinstance(state, dict):
+            for row in imported_lights:
+                packet = label_packet(render_label(row['name']), image_type=2, index=row['slot'] - 1,
+                                      device_key=bytes.fromhex(display_device_key))
+                await write_display_packet(client, packet)
+                print(json.dumps({'display_label_uploaded': row['name'], 'slot': row['slot'],
+                                  'renderer': 'local'}), flush=True)
+        if separate:
             for slot, row in [(3, state['rgb']), (4, state['warm']), (5, (False, 0))]:
                 if busy():
                     return False
@@ -126,24 +141,36 @@ async def send_light_state(device, state, busy, *, initialize_menu=False):
                 packet = color_light_state_packet(slot=6, power=group[0], brightness=group[1],
                           mode=group[2], value=group[3], sequence=int(time.monotonic() * 10) & 0xffff)
                 await client.write_gatt_char(DISPLAY_CHARACTERISTIC, packet, response=True)
-            return True
-        args = dict(power=state[0], brightness=state[1], sequence=int(time.monotonic() * 10) & 0xffff)
-        packet = (color_light_state_packet(**args, mode=state[2], value=state[3]) if len(state) == 4
-                  else light_state_packet(**args))
-        await client.write_gatt_char(DISPLAY_CHARACTERISTIC, packet, response=True)
+        else:
+            args = dict(power=primary[0], brightness=primary[1], sequence=int(time.monotonic() * 10) & 0xffff)
+            packet = (color_light_state_packet(**args, mode=primary[2], value=primary[3]) if len(primary) == 4
+                      else light_state_packet(**args))
+            await client.write_gatt_char(DISPLAY_CHARACTERISTIC, packet, response=True)
+        for row in imported_lights:
+            if busy():
+                return False
+            light = state['imports'][row['slot']]
+            if light is None:
+                continue
+            args = dict(slot=row['slot'], power=light[0], brightness=light[1],
+                        sequence=int(time.monotonic() * 10) & 0xffff)
+            packet = (color_light_state_packet(**args, mode=light[2], value=light[3]) if len(light) == 4
+                      else light_state_packet(**args))
+            await client.write_gatt_char(DISPLAY_CHARACTERISTIC, packet, response=True)
         return True
 
 
 async def run_light_sync(entity, stopped, *, lock, find_device, busy, suppress_activity,
                          color_controls=False, on_feedback=None, separate_controls=False,
                          on_warm_feedback=None, independent_channels=False, on_levels_feedback=None,
-                         ha_lights_menu=False, on_group_feedback=None):
+                         ha_lights_menu=False, on_group_feedback=None, imported_lights=(),
+                         display_device_key='', on_import_feedback=None):
     last_state, last_sent = None, 0
     while not stopped.is_set():
         try:
             if not busy():
                 state = await asyncio.to_thread(read_light_state, entity, color_controls, separate_controls,
-                                                independent_channels and separate_controls, ha_lights_menu)
+                                                independent_channels and separate_controls, ha_lights_menu, imported_lights)
                 if state is not None and (state != last_state or time.monotonic() - last_sent >= 30):
                     async with lock:
                         if not busy():
@@ -151,19 +178,24 @@ async def run_light_sync(entity, stopped, *, lock, find_device, busy, suppress_a
                             try:
                                 device = await find_device(KNOB_ADDRESS)
                                 sent = await asyncio.wait_for(send_light_state(
-                                    device, state, busy, initialize_menu=last_state is None), 100 if separate_controls else 35)
+                                    device, state, busy, initialize_menu=last_state is None,
+                                    imported_lights=imported_lights, display_device_key=display_device_key),
+                                    100 if separate_controls or imported_lights else 35)
                             finally:
                                 suppress_activity(5)
                             if sent:
                                 last_state, last_sent = state, time.monotonic()
                                 if on_feedback and not busy():
-                                    on_feedback(state['rgb'][1] if separate_controls else state[1])
+                                    primary = state.get('primary') if isinstance(state, dict) else state
+                                    on_feedback(state['rgb'][1] if separate_controls else primary[1])
                                     if separate_controls and on_warm_feedback:
                                         on_warm_feedback(state['warm'][1])
                                     if separate_controls and on_levels_feedback:
                                         on_levels_feedback(state)
                                     if separate_controls and 'group' in state and on_group_feedback:
                                         on_group_feedback(state['group'][1])
+                                    if imported_lights and on_import_feedback:
+                                        on_import_feedback(state['imports'])
                                 print(json.dumps({"light_display": "synchronized", "entity_id": entity,
                                                   "state": state}), flush=True)
         except Exception as exc:
