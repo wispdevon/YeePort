@@ -194,8 +194,8 @@ async def run_light_sync(entity, stopped, *, lock, find_device, busy, suppress_a
                                         on_levels_feedback(state)
                                     if separate_controls and 'group' in state and on_group_feedback:
                                         on_group_feedback(state['group'][1])
-                                    if imported_lights and on_import_feedback:
-                                        on_import_feedback(state['imports'])
+                                    if on_import_feedback:
+                                        on_import_feedback(state.get('imports', {}) if isinstance(state, dict) else {})
                                 print(json.dumps({"light_display": "synchronized", "entity_id": entity,
                                                   "state": state}), flush=True)
         except Exception as exc:

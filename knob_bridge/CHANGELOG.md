@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0 — 2026-10-13
+
+### Added
+
+- **Open Web UI** light importer inside Home Assistant: choose lights or
+  groups, name their English menu entries, and import or remove them yourself.
+- Local English label rendering using the private `display_device_key`.
+- Independent imported-light controls and saved `imported_lights` records.
+
+The verified eight-entry menu allows two imports alongside the current six
+controls, or five with separate brightness controls disabled. New imports
+briefly restart the bridge and become active after display synchronization.
+
 ## 0.7.0 — 2026-10-13
 
 ### Added

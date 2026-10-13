@@ -52,11 +52,13 @@ class ImportedMenu(unittest.TestCase):
                 prepare_import(self.options, records, self.states)
 
     def test_local_label_matches_verified_png_shape_and_fits_long_names(self):
-        for name in ('Wiz Bulb', 'ABCDEFGHIJKLMNOPQRSTUVWX'):
+        for name in ('Wiz Bulb', 'ABCDEFGHIJKLMNOPQRSTUVWX', 'W' * 24):
             png = render_label(name)
             image = Image.open(io.BytesIO(png))
             self.assertEqual((image.size, image.mode), ((240, 48), 'RGBA'))
             self.assertIsNotNone(image.getbbox())
+            self.assertGreaterEqual(image.getbbox()[0], 4)
+            self.assertLessEqual(image.getbbox()[2], 236)
             self.assertLessEqual(len(png), 60000)
 
     def test_authenticated_imports_wait_for_menu_sync_and_route_to_their_entity(self):
@@ -123,3 +125,9 @@ class ImportedMenu(unittest.TestCase):
         worker.submit({'slot': 7, 'kind': 'power', 'value': False, 'imported': True, 'entity_id': 'light.bulb'})
         self.assertEqual([(e['slot'], e['kind']) for e in worker.pending.values()],
                          [(8, 'brightness'), (7, 'power')])
+
+    def test_original_group_off_cancels_imports_in_the_compact_menu(self):
+        worker = LightWorker('light.group', SimpleNamespace(independent=True))
+        worker.submit({'slot': 4, 'kind': 'brightness', 'value': 20, 'imported': True, 'entity_id': 'light.bulb'})
+        worker.submit({'slot': 3, 'kind': 'power', 'value': False, 'supergroup': True})
+        self.assertEqual([(e['slot'], e['kind']) for e in worker.pending.values()], [(3, 'power')])

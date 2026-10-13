@@ -36,6 +36,13 @@ above zero and use warm-white temperature mode when RGB is zero;
 scene with pure-red native RGB/RGBW/RGBWW values, zero white channels, brightness
 26 out of 255, and state on for the target members. Point `preset_scene` at its
 entity ID. The owner's scene is `scene.usual_red_10`, named Usual Red 10%.
+
+Version 0.8.0 adds a self-service light importer through **Open Web UI** on the
+Home Assistant app page. Set private `display_device_key` from the same device
+key used by the verified label upload, then select lights/groups and name their
+English entries. Imports use local label rendering and persist in
+`imported_lights`. See the [light importer guide](light-importer.md) for capacity,
+supported controls and operation.
 These HA actions were exercised successfully and the English labels uploaded;
 the owner confirmed the English entries and live RGB/preset commands.
 Independent blending passed live HA tests. The owner also confirmed the physical

@@ -72,7 +72,7 @@ class LightReceiver:
         self.separate = options.get('separate_brightness_controls', False)
         self.supergroup = self.separate and options.get('ha_lights_menu_enabled', False)
         self.imports = {row['slot']: row for row in imported_menu(options)}
-        self.imports_ready = not self.imports
+        self.imports_ready = False
         self.import_scaling = {slot: BrightnessScaling(options.get('brightness_speed_scaling', False),
                               options.get('brightness_maximum_gain', 4)) for slot in self.imports}
         self.slots = tuple((3, 4, 5, 6) if self.supergroup else ((3, 4, 5) if self.separate else (3,))) + tuple(self.imports)
@@ -129,6 +129,8 @@ class LightReceiver:
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
             event = asdict(command)
+            if (not self.separate and command.slot == 3) or (self.supergroup and command.slot == 6):
+                event['supergroup'] = True
             if imported:
                 event.update(imported=True, entity_id=imported['entity_id'], name=imported['name'])
             elif self.separate and command.slot == 5:
@@ -379,7 +381,8 @@ class LightWorker:
             for key, pending in list(self.pending.items()):
                 if pending.get('entity_id') == event['entity_id']:
                     self.pending.pop(key)
-        elif event['kind'] == 'scene' or (event.get('slot') == 6 and not event.get('imported') and
+        elif event['kind'] == 'scene' or ((event.get('supergroup') or
+                                       (event.get('slot') == 6 and not event.get('imported'))) and
                                       event['kind'] == 'power' and event['value'] is False):
             self.pending.clear()
         elif event['kind'] in ('power', 'warm_power') and event['value'] is False:

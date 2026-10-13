@@ -42,6 +42,12 @@ def imported_menu(options):
     return rows
 
 
+def light_controls(state):
+    modes = state.get('attributes', {}).get('supported_color_modes', [])
+    color = 'color_temp' in modes and any(m in modes for m in ('rgb', 'rgbw', 'rgbww', 'hs', 'xy'))
+    return 'color' if color else ('switch' if modes == ['onoff'] else 'brightness')
+
+
 def prepare_import(options, selected, states):
     records = []
     if not isinstance(selected, list):
@@ -53,10 +59,7 @@ def prepare_import(options, selected, states):
         state = states.get(entity) if isinstance(entity, str) else None
         if state is None or not entity.startswith('light.'):
             raise ValueError('The selected light was not found in Home Assistant.')
-        modes = state.get('attributes', {}).get('supported_color_modes', [])
-        color = 'color_temp' in modes and any(m in modes for m in ('rgb', 'rgbw', 'rgbww', 'hs', 'xy'))
-        controls = 'color' if color else ('switch' if modes == ['onoff'] else 'brightness')
-        records.append({'entity_id': entity, 'name': record.get('name'), 'controls': controls})
+        records.append({'entity_id': entity, 'name': record.get('name'), 'controls': light_controls(state)})
     # Apply the same strict validation used when the bridge loads its options.
     return [{k: v for k, v in row.items() if k != 'slot'}
             for row in imported_menu(dict(options, imported_lights=records))]
@@ -67,7 +70,7 @@ def render_label(name):
     name = english_name(name)
     image = Image.new('RGBA', (240, 48), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    for size in range(36, 11, -1):
+    for size in range(36, 7, -1):
         font = ImageFont.truetype('DejaVuSans.ttf', size)
         if draw.textlength(name, font=font) <= 232:
             break

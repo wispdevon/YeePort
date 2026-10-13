@@ -390,3 +390,27 @@ metadata, subsequent independent-channel changes and whole-group power-off
 coalescing. The owner confirmed the physical sixth entry controls the available
 lights together. Live authenticated slot-6 white-temperature commands were
 also applied to the group successfully.
+
+### Self-service light imports (0.8.0)
+
+Version 0.8.0 adds a Home Assistant ingress UI to select light entities/groups,
+give their menu entries English names and import/remove them. Settings are
+persisted through the app's own Supervisor options API. The existing six
+entries leave two import slots; the compact three-entry layout leaves five.
+Imported slots map authenticated commands to their selected entities and are
+enabled after display synchronization succeeds. The completion status also
+waits for synchronization after removing the last import.
+
+English label PNGs are rendered locally as 240×48 eight-bit RGBA, matching the
+verified vendor canvas, and uploaded with the existing private display key.
+The deployed API's light choices and status were checked for credential
+isolation. The Home Assistant ingress page, script, stylesheet, icon and API
+all returned HTTP 200. A live browser check loaded five listed light entities
+with the private setup complete, and checked a 320-pixel mobile
+layout and a clean application console. Fixture browser tests exercised
+import, removal, required-field validation and keyboard navigation.
+
+All 40 local tests pass. Source and metadata for 0.8.0 are deployed to the Pi.
+The owner confirmed their first import appears on the physical knob and
+controls the selected light. Local English label rendering and the import
+flow are physically verified on this unit.

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="yeeport-base" content="__YEEPORT_BASE__">
+  <title>YeePort · Light importer</title>
+  <link rel="icon" href="__YEEPORT_BASE__favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="__YEEPORT_BASE__style.css">
+  <script src="__YEEPORT_BASE__app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand"><span class="knob-mark" aria-hidden="true"></span> YeePort</div>
+      <p class="eyebrow">LIGHT IMPORTER</p>
+      <div class="heading"><h1>Lights on your knob</h1><span id="capacity" class="badge">Loading…</span></div>
+      <p class="intro">Choose a Home Assistant light or group and give it a name for the knob’s menu.</p>
+    </header>
+
+    <div id="status" role="status" aria-live="polite"></div>
+    <div id="error" role="alert" hidden></div>
+
+    <section aria-labelledby="menu-heading">
+      <div class="section-heading"><h2 id="menu-heading">Your menu</h2><button id="refresh" type="button" class="secondary">Refresh</button></div>
+      <p class="hint">Existing controls</p>
+      <ul id="builtins" class="chips" aria-label="Existing knob controls"></ul>
+      <h3>Imported lights</h3>
+      <p id="empty" class="empty">No lights imported yet. Add your first light below.</p>
+      <ul id="imported" class="light-list" aria-label="Imported lights"></ul>
+    </section>
+
+    <section aria-labelledby="import-heading">
+      <h2 id="import-heading">Import a light</h2>
+      <p id="room" class="hint">Reading available menu space…</p>
+      <form id="import-form">
+        <label for="light">Home Assistant light or group</label>
+        <select id="light" name="light" required disabled aria-describedby="light-help">
+          <option value="">Choose a light…</option>
+        </select>
+        <p id="light-help" class="hint">A light group controls all its members from one menu entry.</p>
+
+        <label for="name">English menu name</label>
+        <input id="name" name="name" type="text" required maxlength="24" pattern="[\x20-\x7E]{1,24}"
+               autocomplete="off" placeholder="e.g. Bedside lamp" aria-describedby="name-help" disabled>
+        <p id="name-help" class="hint">Up to 24 English characters. This name appears on the knob.</p>
+        <button id="import-button" type="submit" disabled>Import to knob</button>
+        <p class="footnote">Saving briefly restarts YeePort. Keep the knob nearby and wait for “Menu updated.”</p>
+      </form>
+    </section>
+    <footer>On the knob, hold a light’s icon to open its controls.</footer>
+  </main>
+</body>
+</html>

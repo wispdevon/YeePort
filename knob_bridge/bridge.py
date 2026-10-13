@@ -24,6 +24,7 @@ from weather_sync import run_weather_sync
 from light_control import LightReceiver, LightWorker, SeparateLightController
 from light_sync import run_light_sync
 from light_imports import imported_menu
+from import_ui import start_ui
 
 
 def mqtt_settings(options):
@@ -158,6 +159,7 @@ async def run(options):
     weather_task = None
     light_task = None
     light_sync_task = None
+    ui_server = None
     local_gatt_lock = asyncio.Lock()
     suppress_until = 0
 
@@ -190,6 +192,9 @@ async def run(options):
                     print(json.dumps(event), flush=True)
 
     try:
+        if os.environ.get('SUPERVISOR_TOKEN'):
+            ui_server = await asyncio.to_thread(start_ui, options,
+                          lambda: bool(light_worker and receiver.imports_ready))
         monitor = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
         # Python <3.14 only accepts the legacy HCI address tuple. Use Linux's
         # sockaddr_hci layout directly to select the monitor channel reliably.
@@ -247,6 +252,9 @@ async def run(options):
                 find_device=find_device))
             await stopped.wait()
     finally:
+        if ui_server:
+            await asyncio.to_thread(ui_server.shutdown)
+            ui_server.server_close()
         sync_tasks = [task for task in (clock_task, weather_task, light_task, light_sync_task) if task]
         for task in sync_tasks:
             task.cancel()

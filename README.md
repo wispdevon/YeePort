@@ -18,7 +18,7 @@ The owner confirmed that the knob's English **HA Lights** screen controls the
 Home Assistant group `light.knob_lights`: brightness, on/off, RGB color and
 Kelvin color temperature all work. On the knob, scroll to **HA Lights** and
 hold its icon to open the controls. These controls were verified with 0.5.2;
-the bridge release is now version 0.7.0.
+the bridge release is now version 0.8.0.
 
 ### Separate brightness controls and a red preset
 
@@ -66,6 +66,20 @@ the turn ends. Haptic strength is not verified as configurable, and knob effects
 are not implemented.
 
 ## How local control works
+
+### Import your own lights
+
+Open the **YeePort S Knob** app in Home Assistant and click **Open Web UI**.
+Choose a light or light group, enter an English menu name, and click
+**Import to knob**. Wait for **Menu updated**, then hold the new entry's icon
+on the knob to open its controls. You can remove imported entries from the
+same page. Imports persist in the app's configuration.
+
+The verified menu format supports eight entries. The current six-entry layout
+has space for two imports; a group occupies one entry. English labels are
+rendered locally using the recovered display device key. Setup and supported
+controls are covered in the [light importer guide](docs/light-importer.md).
+The owner confirmed their first imported entry appears and controls its light.
 
 ```mermaid
 ---
@@ -206,7 +220,7 @@ uppercase path placeholder with your own file path:
 
 The dependency installation and public-source tests were checked in a fresh
 virtual environment. Tests requiring private captures or an external firmware
-reference skip when those inputs are absent. The full owner's 25-test suite
+reference skip when those inputs are absent. The full owner's 40-test suite
 also passed. Firmware builders reproduced the exact candidate hashes used on
 the device, and offline decoding revalidated all 57 brightness-capture packets.
 These checks do not repeat firmware flashing.

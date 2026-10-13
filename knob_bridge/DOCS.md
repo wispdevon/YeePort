@@ -1,6 +1,6 @@
-# YeeGate S Knob
+# YeePort S Knob
 
-Version 0.7.0 decrypts and authenticates this provisioned S Knob's light commands
+Version 0.8.0 decrypts and authenticates this provisioned S Knob's light commands
 locally. Its third entry, **HA Lights**, controls the configured Home Assistant
 light group. Clock and weather synchronization remain local. No Yeelight login
 or cloud credentials are used during operation.
@@ -95,7 +95,8 @@ use the authenticated light-command triggers for control automations.
 
 Install the Mosquitto broker app and MQTT integration. Copy this directory to
 HAOS `/addons/yeegate_knob`, reload the app store, install/update YeeGate S Knob,
-and start it. Keep the knob within Bluetooth range of the Pi. The app uses host
+and start it. Its display name is now **YeePort S Knob**, with the same installation
+slug. Keep the knob within Bluetooth range of the Pi. The app uses host
 Bluetooth/D-Bus access and NET_ADMIN/NET_RAW; AppArmor is disabled in this
 experimental build.
 
@@ -148,6 +149,35 @@ controls. Group brightness preserves the current channel mix; RGB selection
 zeros white channels; white-temperature selection switches to white mode.
 The independent controls refresh from HA after these actions. The flag defaults
 to false, preserving the five-entry menu on existing installations.
+
+## Import your own lights
+
+Click **Open Web UI** on this app's Home Assistant page. Select a light or group,
+enter an English menu name (up to 24 characters), and click **Import to knob**.
+Wait for **Menu updated** before using the new entry. The bridge briefly
+restarts to apply the menu; keep the knob nearby and awake. Use **Remove** to
+delete an imported entry. Existing relay and configured light controls stay in
+place.
+
+The menu accepts eight entries total. With the current six built-in entries,
+two imports fit. Disabling separate brightness controls uses three built-in
+entries, leaving room for five imports. Groups occupy one entry each.
+
+The UI saves `imported_lights` records with `entity_id`, `name`, and `controls`.
+RGB plus white-temperature capable entities get the full-color UI; other
+dimmable lights get brightness controls, and on/off-only lights get a toggle.
+Group and imported color commands retain the native RGBW/RGBWW pure-color
+behavior. Imported commands target the selected entity rather than the main
+`light_entity` group.
+
+Set private `display_device_key` to the same 32-hex-character `device_key`
+used by the successful display-label upload. This is separate from the Mesh
+network/application keys and recovered factory secret. The UI never returns
+credentials. The key is configured on this owner's installation already.
+English labels are generated locally as 240×48 RGBA PNGs; imports use no
+Yeelight cloud renderer. Imported slots accept commands after menu/state
+synchronization succeeds. The interface uses authenticated Home Assistant
+ingress and accepts connections only from the Supervisor ingress proxy.
 
 ## Clock, weather and screen language
 

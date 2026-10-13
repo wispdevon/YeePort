@@ -1,8 +1,8 @@
 {
-  "name": "YeeGate S Knob",
-  "version": "0.7.0",
+  "name": "YeePort S Knob",
+  "version": "0.8.0",
   "slug": "yeegate_knob",
-  "description": "Local S Knob authenticated brightness/power control, MQTT actions, clock and weather",
+  "description": "Import HA lights into your S Knob, with local controls, MQTT actions, clock and weather",
   "arch": [
     "aarch64",
     "amd64"
@@ -48,7 +48,9 @@
     "warm_white_kelvin": 2700,
     "preset_scene": "scene.usual_red_10",
     "independent_channels": true,
-    "ha_lights_menu_enabled": false
+    "ha_lights_menu_enabled": false,
+    "display_device_key": "",
+    "imported_lights": []
   },
   "schema": {
     "address": "match(^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$)",
@@ -78,9 +80,22 @@
     "warm_white_kelvin": "int(1000,10000)",
     "preset_scene": "match(^scene\\.[a-z0-9_]+$)",
     "independent_channels": "bool",
-    "ha_lights_menu_enabled": "bool"
+    "ha_lights_menu_enabled": "bool",
+    "display_device_key": "password?",
+    "imported_lights": [
+      {
+        "entity_id": "match(^light\\.[a-z0-9_]+$)",
+        "name": "str(1,24)",
+        "controls": "list(color|brightness|switch)"
+      }
+    ]
   },
   "homeassistant_api": true,
+  "ingress": true,
+  "ingress_port": 0,
+  "panel_title": "YeePort",
+  "panel_icon": "mdi:lightbulb-group",
+  "panel_admin": true,
   "map": [
     {
       "type": "share",

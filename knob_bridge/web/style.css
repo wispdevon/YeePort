@@ -1,0 +1,61 @@
+:root {
+  color-scheme: light dark;
+  --background: #f4f6f8; --surface: #fff; --text: #18232b; --muted: #596875;
+  --border: #d5dce2; --accent: #006b96; --accent-text: #fff;
+  --subtle: #eaf2f7; --danger: #a62222; --danger-bg: #fff0ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #11181e; --surface: #1c252d; --text: #eef2f5; --muted: #b3c0ca;
+    --border: #3d4b56; --accent: #73c9ef; --accent-text: #0b2632;
+    --subtle: #263743; --danger: #ffaaa3; --danger-bg: #3b2224;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--background); color: var(--text); font: 1rem/1.5 system-ui, sans-serif; }
+main { max-width: 52rem; margin: 0 auto; padding: 2rem 1.5rem; }
+header { margin-bottom: 1.5rem; }
+.brand { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 700; }
+.knob-mark { width: 1.5rem; height: 1.5rem; border: 3px solid var(--accent); border-radius: 50%; position: relative; }
+.knob-mark::after { content: ""; position: absolute; height: .5rem; width: 2px; background: var(--accent); top: 1px; left: 50%; }
+.eyebrow { margin: 1.75rem 0 .5rem; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
+.heading, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); line-height: 1.2; letter-spacing: -.025em; }
+h2 { margin: 0; font-size: 1.125rem; }
+h3 { margin: 1.5rem 0 .5rem; font-size: .875rem; }
+.intro { margin: .75rem 0 0; color: var(--muted); max-width: 39rem; }
+.badge { flex-shrink: 0; border: 1px solid var(--border); border-radius: .25rem; padding: .25rem .5rem; font-size: .75rem; font-weight: 600; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: 1.5rem; margin-top: 1rem; }
+.hint, .footnote, .empty, footer { color: var(--muted); font-size: .875rem; }
+.hint { margin: .5rem 0 1rem; }
+.empty { margin: .5rem 0 0; }
+ul { padding: 0; list-style: none; }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; }
+.chips li { background: var(--subtle); border-radius: .25rem; padding: .25rem .625rem; font-size: .875rem; }
+.light-list { margin: 0; }
+.light-row { display: flex; align-items: center; gap: .75rem; padding: 1rem 0; border-top: 1px solid var(--border); }
+.slot { width: 1.75rem; height: 1.75rem; display: grid; place-items: center; flex-shrink: 0; background: var(--subtle); border-radius: 50%; font-size: .75rem; font-weight: 700; }
+.light-details { flex: 1; min-width: 0; }
+.light-details strong { display: block; overflow-wrap: anywhere; }
+.light-details small { display: block; color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
+label { display: block; font-weight: 600; font-size: .875rem; margin: 1rem 0 .5rem; }
+input, select { display: block; width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .25rem; background: var(--surface); color: var(--text); font: inherit; padding: .625rem .75rem; }
+select { padding-right: 2rem; }
+input:user-invalid, select:user-invalid { border-color: var(--danger); }
+button { min-height: 2.75rem; border: 1px solid transparent; border-radius: .25rem; padding: .625rem 1rem; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
+button.secondary { border-color: var(--border); background: var(--surface); color: var(--text); padding: .375rem .75rem; font-size: .875rem; }
+button.remove { min-height: 2.75rem; background: transparent; color: var(--danger); padding: .5rem; font-size: .875rem; }
+button:hover:not(:disabled) { filter: brightness(.93); }
+button:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.footnote { margin: .75rem 0 0; }
+footer { margin-top: 1.5rem; }
+#status:not(:empty), #error:not([hidden]) { border-radius: .25rem; padding: .75rem 1rem; margin: 1rem 0; font-size: .875rem; }
+#status:not(:empty) { background: var(--subtle); }
+#error { color: var(--danger); background: var(--danger-bg); }
+@media (max-width: 480px) {
+  main { padding: 1.25rem 1rem; }
+  section { padding: 1rem; }
+  .heading { flex-wrap: wrap; gap: .5rem; }
+  #import-button { width: 100%; }
+}
