@@ -28,7 +28,7 @@ The owner confirmed the following on the physical unit with bridge 0.5.1;
 
 Haptic strength has no verified setting. Effects are not implemented.
 
-Version 0.6.1 adds an optional separate menu with RGB Lights, Warm White and
+Version 0.6.1 added an optional separate menu with RGB Lights, Warm White and
 Red 10%. Enable `separate_brightness_controls` to use it. With `independent_channels` enabled, each ring preserves the other channel's
 level on native RGBW/RGBWW devices. RGB-only devices follow RGB while it is
 above zero and use warm-white temperature mode when RGB is zero;
@@ -40,6 +40,12 @@ These HA actions were exercised successfully and the English labels uploaded;
 the owner confirmed the English entries and live RGB/preset commands.
 Independent blending passed live HA tests. The owner also confirmed the physical
 Warm White ring increases white light while RGB stays on.
+
+Version 0.7.0 can append the full-color HA Lights entry to that menu. Enable
+`ha_lights_menu_enabled` with `separate_brightness_controls`. Hold HA Lights to
+control the whole group's brightness, color and white temperature. This entry
+uses the same `light_entity`, while the separate channel and red preset entries
+remain available. Its private label bundle adds index 5 / HA Lights.
 See the [bridge guide](../knob_bridge/DOCS.md#red-preset-and-separate-menu-labels)
 for the private, one-time label bundle. No firmware flash is part of this change.
 

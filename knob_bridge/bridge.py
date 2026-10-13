@@ -232,7 +232,9 @@ async def run(options):
                     separate_controls=options.get('separate_brightness_controls', False),
                     on_warm_feedback=receiver.warm_scaling.rebase,
                     independent_channels=options.get('independent_channels', False),
-                    on_levels_feedback=getattr(light_worker.callback, 'sync_feedback', None)))
+                    on_levels_feedback=getattr(light_worker.callback, 'sync_feedback', None),
+                    ha_lights_menu=options.get('ha_lights_menu_enabled', False),
+                    on_group_feedback=receiver.group_scaling.rebase))
             clock_task = asyncio.create_task(run_clock_sync(
                 options, stopped, lock=local_gatt_lock, suppress_activity=suppress_activity,
                 find_device=find_device))

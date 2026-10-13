@@ -373,3 +373,20 @@ to pure red at brightness 26/255, with white channels zero. Its fourth member
 was unavailable. The owner confirmed the physical Warm White ring changes
 warm intensity while red stays on, and both channels remain on together.
 Slot-4 routing and repeated preset presses are covered by the local tests.
+
+### Whole-group HA Lights entry (0.7.0)
+
+The owner requested the full-color HA Lights entry alongside the independent
+controls. Version 0.7.0 adds it at slot 6, preserving both relays and slots
+3/4/5 for RGB, warm white and the red preset. It targets `light.knob_lights`
+for group brightness, power, RGB and Kelvin controls. Group brightness leaves
+the current channel mix intact; RGB selection retains the verified pure-color
+behavior. Independent controls read refreshed levels after a group action.
+
+The Pi is running 0.7.0 with the optional entry enabled. All four English menu
+label uploads completed, and live feedback includes the slot-6 group state.
+All 25 local tests passed, including opt-in packet routing, full-color display
+metadata, subsequent independent-channel changes and whole-group power-off
+coalescing. The owner confirmed the physical sixth entry controls the available
+lights together. Live authenticated slot-6 white-temperature commands were
+also applied to the group successfully.

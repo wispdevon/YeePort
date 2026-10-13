@@ -1,6 +1,6 @@
 # YeeGate S Knob
 
-Version 0.6.1 decrypts and authenticates this provisioned S Knob's light commands
+Version 0.7.0 decrypts and authenticates this provisioned S Knob's light commands
 locally. Its third entry, **HA Lights**, controls the configured Home Assistant
 light group. Clock and weather synchronization remain local. No Yeelight login
 or cloud credentials are used during operation.
@@ -128,7 +128,8 @@ activation finds them available; activating a scene does not queue retries.
 The new device-menu labels use the existing authenticated image-upload codec.
 An owner-prepared, mode-0600 bundle at `/share/yeeport-display-labels.json`
 contains `address`, `device_key`, and `labels`, with exact index/name pairs
-2/`RGB Lights`, 3/`Warm White`, and 4/`Red 10%`. Each label's `png` is its
+2/`RGB Lights`, 3/`Warm White`, and 4/`Red 10%`. With `ha_lights_menu_enabled`
+enabled, the bundle also includes 5/`HA Lights`. Each label's `png` is its
 base64 vendor-rendered PNG. The app mounts `/share`, uploads only those bounded
 device-image slots during initial menu setup, then deletes the bundle. Keep
 this file private; the package and repository contain no label images or keys.
@@ -139,6 +140,14 @@ blend test verified RGB 10% + warm 15%, then RGB 20% with warm still 15%, and
 preset restoration to RGB 10% + warm 0%. The owner confirmed the physical
 Warm White ring works and both RGB and warm white stay on together.
 The prior single-entry color/temperature UI is physically verified.
+
+Enable `ha_lights_menu_enabled` alongside `separate_brightness_controls` to
+append the full-color **HA Lights** entry after Red 10%. It targets the same
+`light_entity` group. Hold its icon for brightness, RGB and white-temperature
+controls. Group brightness preserves the current channel mix; RGB selection
+zeros white channels; white-temperature selection switches to white mode.
+The independent controls refresh from HA after these actions. The flag defaults
+to false, preserving the five-entry menu on existing installations.
 
 ## Clock, weather and screen language
 

@@ -18,7 +18,7 @@ The owner confirmed that the knob's English **HA Lights** screen controls the
 Home Assistant group `light.knob_lights`: brightness, on/off, RGB color and
 Kelvin color temperature all work. On the knob, scroll to **HA Lights** and
 hold its icon to open the controls. These controls were verified with 0.5.2;
-the bridge release is now version 0.6.1.
+the bridge release is now version 0.7.0.
 
 ### Separate brightness controls and a red preset
 
@@ -32,6 +32,13 @@ ring, then turn the knob. Press **Red 10%** to restore the preset.
 | RGB Lights | Set the selected RGB color's brightness while keeping the warm-white level. |
 | Warm White | Set warm LED brightness while keeping the RGB level. |
 | Red 10% | Activate the saved **Usual Red 10%** Home Assistant scene. |
+| HA Lights | Control the whole group: on/off, brightness, RGB color, and white temperature. |
+
+With `ha_lights_menu_enabled` enabled, **HA Lights** appears after Red 10%.
+Hold its icon to open the full-color controls. Its brightness ring dims the
+current RGB/white mix together; selecting RGB color clears white channels, and
+selecting temperature switches to white mode. The separate rings then reflect
+the resulting channel levels. All entries target the same `light_entity` group.
 
 The scene is also available in Home Assistant as `scene.usual_red_10`.
 `independent_channels` enables RGB + warm-white blending on the two Wiz lights.
@@ -89,7 +96,7 @@ Solid arrows show control and event delivery. Dashed arrows show feedback to
 the knob. The bridge authenticates both Mesh layers before acting on a command;
 normal operation follows this local path without a Yeelight cloud connection.
 
-### Using the original HA Lights menu
+### Using the HA Lights menu
 
 ```mermaid
 ---
@@ -199,7 +206,7 @@ uppercase path placeholder with your own file path:
 
 The dependency installation and public-source tests were checked in a fresh
 virtual environment. Tests requiring private captures or an external firmware
-reference skip when those inputs are absent. The full owner's 21-test suite
+reference skip when those inputs are absent. The full owner's 25-test suite
 also passed. Firmware builders reproduced the exact candidate hashes used on
 the device, and offline decoding revalidated all 57 brightness-capture packets.
 These checks do not repeat firmware flashing.

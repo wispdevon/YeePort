@@ -12,11 +12,86 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "knob_bridge"))
 from light_control import (BrightnessScaling, LightReceiver, LightWorker, service_payload,
                            pure_color_services, SeparateLightController, warm_white_services)
 from knob_mesh_commands import decode_light_command, VENDOR_OPCODE
-from light_sync import light_display_state
+from light_sync import light_display_state, read_light_state
+from display_config import test_menu_packets
 from channel_control import blend_services, independent_display_state, selected_rgb, light_members
 
 
 class LightServiceMapping(unittest.TestCase):
+    def test_supergroup_commands_keep_separate_slots_and_are_opt_in(self):
+        options = {'address': 'F8:24:41:39:9F:38', 'mesh_net_key': '00' * 16,
+                   'mesh_app_key': '11' * 16, 'mesh_iv_index': 0,
+                   'mesh_unicast_address': 5, 'separate_brightness_controls': True}
+        payloads = [bytes.fromhex(v) for v in ['060100000032', '06030000000000ff',
+                    '06020000000fa0', '0600000000000000']]
+        with tempfile.TemporaryDirectory() as folder:
+            for enabled in (False, True):
+                options['ha_lights_menu_enabled'] = enabled
+                receiver = LightReceiver(options, Path(folder) / str(enabled))
+                events = []
+                for sequence, payload in enumerate(payloads, 1):
+                    message = SimpleNamespace(control=False, source=5, sequence=sequence,
+                                              destination=65278)
+                    with patch('light_control.fields', return_value=[(0x2a, b'packet')]), patch(
+                            'light_control.decrypt_network', return_value=message), patch(
+                            'knob_mesh_commands.decrypt_network', return_value=message), patch(
+                            'knob_mesh_commands.decrypt_unsegmented_access', return_value=VENDOR_OPCODE + payload):
+                        events.extend(receiver.receive(options['address'], -60, b''))
+                self.assertEqual([(e['kind'], e['value'], e['slot']) for e in events],
+                    [('brightness', 50, 6), ('color', (0, 0, 255), 6),
+                     ('color_temperature', 4000, 6), ('power', False, 6)] if enabled else [])
+
+    def test_supergroup_targets_all_lights_and_reloads_channel_levels(self):
+        states = [{'entity_id': 'light.group', 'state': 'on', 'attributes':
+                   {'entity_id': ['light.bulb'], 'brightness': 38, 'color_mode': 'rgbww',
+                    'rgb_color': [255, 0, 0]}},
+                  {'entity_id': 'light.bulb', 'state': 'on', 'attributes':
+                   {'supported_color_modes': ['rgbww', 'color_temp'], 'brightness': 38,
+                    'color_mode': 'rgbww', 'rgbww_color': [170, 0, 0, 0, 255]}}]
+        calls = []
+        def request(path, payload=None):
+            if path == 'states':
+                return states
+            calls.append((path, payload))
+        controller = SeparateLightController({'independent_channels': True}, request)
+        controller.sync_feedback({'rgb': (True, 10), 'warm': (True, 15)})
+        controller('light.group', {'kind': 'brightness', 'value': 50, 'slot': 6})
+        self.assertEqual(calls.pop(), ('services/light/turn_on',
+                                      {'entity_id': 'light.group', 'brightness_pct': 50}))
+        controller('light.group', {'kind': 'color', 'value': [0, 0, 255], 'slot': 6})
+        self.assertEqual(calls.pop(), ('services/light/turn_on',
+                  {'entity_id': 'light.bulb', 'rgbww_color': [0, 0, 255, 0, 0]}))
+        states[1]['attributes'].update(brightness=128, rgbww_color=[0, 0, 255, 0, 0])
+        controller('light.group', {'kind': 'warm_brightness', 'value': 15, 'slot': 4})
+        self.assertEqual(controller.rgb_level, 50)
+        self.assertEqual(calls.pop(), ('services/light/turn_on',
+                  {'entity_id': 'light.bulb', 'brightness': 128,
+                   'rgbww_color': [0, 0, 255, 0, 76]}))
+        controller('light.group', {'kind': 'color_temperature', 'value': 4000, 'slot': 6})
+        self.assertEqual(calls.pop(), ('services/light/turn_on',
+                       {'entity_id': 'light.group', 'color_temp_kelvin': 4000}))
+        controller('light.group', {'kind': 'power', 'value': False, 'slot': 6})
+        self.assertEqual(calls.pop(), ('services/light/turn_off', {'entity_id': 'light.group'}))
+
+    def test_supergroup_display_preserves_menu_slots_and_full_color_state(self):
+        import io
+        states = [{'entity_id': 'light.group', 'state': 'on', 'attributes':
+                   {'entity_id': ['light.bulb'], 'brightness': 38, 'color_mode': 'color_temp',
+                    'color_temp_kelvin': 4000}},
+                  {'entity_id': 'light.bulb', 'state': 'on', 'attributes':
+                   {'supported_color_modes': ['rgbww', 'color_temp'], 'brightness': 38,
+                    'color_mode': 'color_temp', 'color_temp_kelvin': 4000}}]
+        with patch.dict('os.environ', {'SUPERVISOR_TOKEN': 'test'}), patch(
+                'light_sync.urlopen', return_value=io.BytesIO(json.dumps(states).encode())):
+            display = read_light_state('light.group', separate_controls=True,
+                                       independent_channels=True, ha_lights_menu=True)
+        self.assertEqual(display, {'rgb': (False, 0), 'warm': (True, 15),
+                                  'group': (True, 15, 2, 4000)})
+        menu = test_menu_packets(1, separate_controls=True, ha_lights_menu=True)
+        self.assertEqual([(p[11 + 4], p[11 + 7]) for p in menu],
+                         [(1, 24), (2, 24), (3, 2), (4, 2), (5, 1), (6, 4)])
+        self.assertIn(b'HA Lights', menu[-1])
+
     def test_separate_menu_routes_warm_and_every_preset_press(self):
         options = {'address': 'F8:24:41:39:9F:38', 'mesh_net_key': '00' * 16,
                    'mesh_app_key': '11' * 16, 'mesh_iv_index': 0,
@@ -218,6 +293,14 @@ class LightServiceMapping(unittest.TestCase):
 
 
 class LightCommandCoalescing(unittest.IsolatedAsyncioTestCase):
+    async def test_supergroup_off_cancels_pending_channel_changes(self):
+        worker = LightWorker('light.group', SimpleNamespace(independent=True))
+        worker.submit({'kind': 'warm_brightness', 'value': 30, 'slot': 4})
+        worker.submit({'kind': 'brightness', 'value': 10, 'slot': 3})
+        worker.submit({'kind': 'power', 'value': False, 'slot': 6})
+        self.assertEqual(list(worker.pending.values()),
+                         [{'kind': 'power', 'value': False, 'slot': 6}])
+
     async def test_warm_off_preserves_pending_rgb_in_independent_mode(self):
         calls, complete = [], asyncio.Event()
         loop = asyncio.get_running_loop()

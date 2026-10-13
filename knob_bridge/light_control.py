@@ -69,6 +69,9 @@ class LightReceiver:
         self.scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
                                          options.get('brightness_maximum_gain', 4))
         self.separate = options.get('separate_brightness_controls', False)
+        self.supergroup = self.separate and options.get('ha_lights_menu_enabled', False)
+        self.group_scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
+                                               options.get('brightness_maximum_gain', 4))
         self.warm_scaling = BrightnessScaling(options.get('brightness_speed_scaling', False),
                                               options.get('brightness_maximum_gain', 4))
         try:
@@ -89,7 +92,8 @@ class LightReceiver:
             try:
                 command = decode_light_command(packet, net_key=self.net_key,
                             app_key=self.app_key, device_key=None, iv_index=self.iv_index,
-                            source_address=self.source, slot=(3, 4, 5) if self.separate else 3)
+                            source_address=self.source,
+                            slot=(3, 4, 5, 6) if self.supergroup else ((3, 4, 5) if self.separate else 3))
             except (ValueError, InvalidTag):
                 continue
             if command is None or command.sequence <= self.highest:
@@ -118,11 +122,13 @@ class LightReceiver:
                 event.update(kind='scene', value='usual_red_10')
                 self.scaling.rebase(10)
                 self.warm_scaling.rebase(0)
+                self.group_scaling.rebase(10)
             elif command.slot == 4:
                 event['kind'] = 'warm_brightness' if command.kind == 'brightness' else 'warm_power'
             if command.kind == 'brightness':
                 event['raw_percentage'] = command.value
-                scaling = self.warm_scaling if command.slot == 4 else self.scaling
+                scaling = (self.group_scaling if command.slot == 6 else
+                           self.warm_scaling if command.slot == 4 else self.scaling)
                 event['value'] = scaling.apply(command.value, self.last_command)
             event.update(event_type=event['kind'] if event['kind'] not in ('power', 'warm_power') else
                          (('warm_' if command.slot == 4 else '') + ('power_on' if command.value else 'power_off')),
@@ -277,6 +283,13 @@ class SeparateLightController:
             self.initialized = True
             return
         states = {state['entity_id']: state for state in self.request('states')}
+        if event.get('slot') == 6:
+            for service, data in pure_color_services(entity, event, states):
+                self.request('services/light/' + service, data)
+            # The whole-group action can change both channels. Read their new
+            # levels before the next independent-channel action.
+            self.initialized = False
+            return
         if self.independent:
             if not self.initialized:
                 self.sync_feedback(independent_display_state(entity, states))
@@ -338,7 +351,8 @@ class LightWorker:
         self.wake = asyncio.Event()
 
     def submit(self, event):
-        if event['kind'] == 'scene':
+        if event['kind'] == 'scene' or (event.get('slot') == 6 and
+                                      event['kind'] == 'power' and event['value'] is False):
             self.pending.clear()
         elif event['kind'] in ('power', 'warm_power') and event['value'] is False:
             if getattr(self.callback, 'independent', False):
